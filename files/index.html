@@ -540,16 +540,36 @@ const STEPS=[{id:'s1',dur:1800},{id:'s2',dur:4200},{id:'s3',dur:2600},{id:'s4',d
 const TOTAL=STEPS.reduce((a,b)=>a+b.dur,0);
 
 async function startConvert(){
-  if(!selFile)return;
-  const btn=document.getElementById('cvtBtn');
-  btn.disabled=true;btn.textContent='⏳  Processing…';
-  document.getElementById('progCard').classList.add('show');
-  document.getElementById('resCard').classList.remove('show');
-  resetSteps();
-  let elapsed=0;
-  for(let i=0;i<STEPS.length;i++){await runStep(i,elapsed);elapsed+=STEPS[i].dur}
-  await sleep(200);showResults();
-  btn.disabled=false;btn.textContent='⚡  Convert Again';
+  if(!selFile){
+    alert("Upload file first");
+    return;
+  }
+
+  const btn = document.getElementById('cvtBtn');
+  btn.disabled = true;
+  btn.textContent = "⏳ Processing...";
+
+  const formData = new FormData();
+  formData.append("file", selFile);
+
+  try {
+    const response = await fetch("https://soundtoscore.onrender.com/convert", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await response.json();
+    console.log(data);
+
+    alert("Conversion done");
+
+  } catch (error) {
+    console.error(error);
+    alert(" Backend error");
+  }
+
+  btn.disabled = false;
+  btn.textContent = "⚡ Convert to MIDI";
 }
 function resetSteps(){
   STEPS.forEach((s,i)=>{document.getElementById(s.id).className='step';document.getElementById('i'+(i+1)).textContent=String(i+1).padStart(2,'0');document.getElementById('t'+(i+1)).textContent='—'});
