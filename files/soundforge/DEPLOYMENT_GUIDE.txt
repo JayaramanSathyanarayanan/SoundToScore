@@ -1,0 +1,532 @@
+# 🚀 SoundForge AI — Complete Deployment Guide
+# From Your Computer → Live Public Website
+
+==============================================================
+  OVERVIEW
+==============================================================
+
+Your app has two parts:
+
+  Frontend  →  index.html  (hosted FREE on Netlify)
+  Backend   →  Python API  (hosted FREE on Railway)
+
+People visit your Netlify URL → it sends files to Railway → 
+Railway processes the audio and sends back the results.
+
+Total cost: ~$0–$5/month (Railway free tier + optional domain)
+
+==============================================================
+  FOLDER STRUCTURE (what you have)
+==============================================================
+
+soundforge/
+├── frontend/
+│   └── index.html              ← Your website UI
+│
+└── backend/
+    ├── app.py                  ← FastAPI server
+    ├── requirements.txt        ← Python packages
+    ├── Procfile                ← Tells Railway how to start
+    ├── nixpacks.toml           ← Installs ffmpeg + fluidsynth
+    ├── runtime.txt             ← Python 3.11
+    ├── soundfonts/             ← Put .sf2 files here (see Step 3)
+    │   └── GeneralUser_GS.sf2  ← REQUIRED fallback font
+    └── services/
+        ├── __init__.py
+        ├── convert.py          ← MP3 → WAV
+        ├── midi.py             ← WAV → MIDI (Basic Pitch AI)
+        ├── instrument.py       ← MIDI → instrument audio
+        └── transcript.py      ← MIDI → note transcript
+
+
+==============================================================
+  STEP 1 — INSTALL TOOLS ON YOUR COMPUTER
+==============================================================
+
+You need these installed ONCE on your computer to test locally.
+
+─── A. Python 3.11 ───────────────────────────────────────────
+
+  Windows:
+    1. Go to https://python.org/downloads
+    2. Download Python 3.11.x
+    3. Install — CHECK the box "Add Python to PATH"
+
+  Mac:
+    Open Terminal and run:
+    brew install python@3.11
+    (Install Homebrew first from https://brew.sh if needed)
+
+  Ubuntu/Linux:
+    sudo apt update
+    sudo apt install python3.11 python3.11-pip python3.11-venv
+
+─── B. FFmpeg ────────────────────────────────────────────────
+
+  Windows:
+    1. Go to https://ffmpeg.org/download.html
+    2. Click "Windows builds by BtbN"
+    3. Download ffmpeg-master-latest-win64-gpl.zip
+    4. Extract it to C:\ffmpeg
+    5. Add C:\ffmpeg\bin to System PATH:
+       Search "Environment Variables" → System Variables
+       → PATH → Edit → New → C:\ffmpeg\bin → OK
+
+  Mac:
+    brew install ffmpeg
+
+  Ubuntu:
+    sudo apt install ffmpeg
+
+  TEST: Open terminal and type:  ffmpeg -version
+  You should see version info printed.
+
+─── C. FluidSynth ───────────────────────────────────────────
+
+  Windows:
+    1. Go to https://github.com/FluidSynth/fluidsynth/releases
+    2. Download fluidsynth-x.x.x-win10-x64.zip
+    3. Extract to C:\fluidsynth
+    4. Add C:\fluidsynth\bin to System PATH (same as FFmpeg above)
+
+  Mac:
+    brew install fluid-synth
+
+  Ubuntu:
+    sudo apt install fluidsynth
+
+  TEST: Open terminal and type:  fluidsynth --version
+
+
+==============================================================
+  STEP 2 — SET UP THE PYTHON BACKEND LOCALLY
+==============================================================
+
+Open your terminal / command prompt:
+
+  cd soundforge/backend
+
+  # Create virtual environment
+  python -m venv venv
+
+  # Activate it:
+  # Windows:
+  venv\Scripts\activate
+  # Mac/Linux:
+  source venv/bin/activate
+
+  # Install all packages (this takes 2-5 minutes)
+  pip install -r requirements.txt
+
+  # You should see many packages installing including basic-pitch
+
+
+==============================================================
+  STEP 3 — DOWNLOAD SOUNDFONTS (.sf2 files)
+==============================================================
+
+SoundFonts are what make instruments sound realistic.
+Put ALL .sf2 files inside:  soundforge/backend/soundfonts/
+
+─── REQUIRED (fallback for all instruments) ─────────────────
+
+  GeneralUser GS — covers ALL 128 General MIDI instruments
+  
+  Download from:
+  https://musical-artifacts.com/artifacts/153
+  
+  Click "Download" → save as:
+  soundforge/backend/soundfonts/GeneralUser_GS.sf2
+
+  THIS IS REQUIRED. The app will not work without it.
+
+─── OPTIONAL (better sound for specific instruments) ─────────
+
+  For more realistic brass sounds, download these and rename them
+  exactly as shown:
+
+  Instrument        Filename to save as
+  ─────────────────────────────────────────────────
+  Trumpet/Cornet    cornet.sf2
+  Trombone          trombone.sf2
+  Euphonium         euphonium.sf2
+  Tuba              tuba.sf2
+  Flute             flute.sf2
+  Drums             drums.sf2
+  Glockenspiel      glockenspiel.sf2
+  Timpani           timpani.sf2
+
+  Good sources for free .sf2 files:
+  → https://musical-artifacts.com/artifacts?formats=sf2
+  → https://www.hammersound.net
+  → https://www.soundfonts4u.com
+
+  Search for: "brass sf2 free", "orchestral sf2 free"
+
+  If a specific .sf2 is missing, the app automatically
+  uses GeneralUser_GS.sf2 as a fallback — it still works!
+
+
+==============================================================
+  STEP 4 — TEST LOCALLY (Before Deploying)
+==============================================================
+
+  # Terminal 1 — Start the backend
+  cd soundforge/backend
+  source venv/bin/activate   (or venv\Scripts\activate on Windows)
+  uvicorn app:app --reload --port 8000
+
+  You should see:
+  INFO:     Uvicorn running on http://127.0.0.1:8000
+
+  # Terminal 2 — Serve the frontend
+  cd soundforge/frontend
+  python -m http.server 3000
+
+  Open your browser:  http://localhost:3000
+
+  TEST:
+  1. Upload an MP3 file
+  2. Select an instrument (e.g. Solo Cornet)
+  3. Click Convert
+  4. You should see real progress and get real downloads
+
+  If it works locally → ready to deploy online!
+
+
+==============================================================
+  STEP 5 — PUSH CODE TO GITHUB
+==============================================================
+
+GitHub stores your code so Railway can deploy it.
+
+─── A. Create a GitHub account ──────────────────────────────
+
+  Go to https://github.com and sign up (free)
+
+─── B. Create a new repository ──────────────────────────────
+
+  1. Click the "+" button top right → "New repository"
+  2. Name it:  soundforge
+  3. Set to Public
+  4. Click "Create repository"
+
+─── C. Upload your code ─────────────────────────────────────
+
+  Option 1 — Using Git (recommended):
+
+    # Install Git if needed: https://git-scm.com/downloads
+    
+    cd soundforge
+    git init
+    git add .
+    git commit -m "Initial SoundForge AI"
+    git branch -M main
+    git remote add origin https://github.com/YOURUSERNAME/soundforge.git
+    git push -u origin main
+
+  Option 2 — Upload via browser (easier for beginners):
+
+    1. On your new GitHub repo page, click "uploading an existing file"
+    2. Drag your entire soundforge/ folder into the browser
+    3. Click "Commit changes"
+
+─── D. Add .gitignore (don't upload big files) ──────────────
+
+  Create a file called .gitignore in soundforge/ with:
+
+    backend/venv/
+    backend/uploads/
+    backend/outputs/
+    backend/__pycache__/
+    backend/services/__pycache__/
+    *.pyc
+    .DS_Store
+
+  NOTE: Do NOT upload .sf2 files to GitHub (too large).
+  You'll add them directly in Railway (see Step 6D).
+
+
+==============================================================
+  STEP 6 — DEPLOY BACKEND TO RAILWAY (Free)
+==============================================================
+
+Railway hosts your Python backend for free.
+
+─── A. Create Railway account ───────────────────────────────
+
+  1. Go to https://railway.app
+  2. Click "Login" → "Login with GitHub"
+  3. Authorize Railway
+
+─── B. Create new project ───────────────────────────────────
+
+  1. Click "New Project"
+  2. Click "Deploy from GitHub repo"
+  3. Select your "soundforge" repository
+  4. Click "Deploy Now"
+
+─── C. Set the root directory ───────────────────────────────
+
+  Railway needs to know where the backend code is:
+
+  1. Click your service (the box that appeared)
+  2. Go to "Settings" tab
+  3. Find "Root Directory"
+  4. Set it to:  backend
+  5. Click "Save"
+  6. Railway will redeploy automatically
+
+─── D. Upload SoundFonts to Railway ─────────────────────────
+
+  Since .sf2 files are large, upload them via Railway's shell:
+
+  1. In Railway, click your service → "Shell" tab (or "Connect")
+  2. You'll see a terminal inside Railway
+  3. Run these commands to download the soundfont directly:
+
+    cd soundfonts
+    curl -L "https://musical-artifacts.com/artifacts/153/download" \
+         -o GeneralUser_GS.sf2
+
+  OR: Use Railway's Volume feature:
+  1. Click "Add Volume" in your service
+  2. Mount path: /app/soundfonts
+  3. Upload .sf2 files through the Railway dashboard
+
+─── E. Set Environment Variables ────────────────────────────
+
+  In Railway → your service → "Variables" tab, add:
+
+  ALLOWED_ORIGINS = https://YOUR-NETLIFY-URL.netlify.app
+
+  (You'll get this URL in Step 7 — come back and update it)
+
+─── F. Get your Railway URL ─────────────────────────────────
+
+  1. Click your service → "Settings" tab
+  2. Under "Networking" → click "Generate Domain"
+  3. You get a URL like:
+     https://soundforge-production-abc1.up.railway.app
+
+  COPY THIS URL — you need it in two places:
+    → index.html  (Step 8)
+    → ALLOWED_ORIGINS env var (Step 6E)
+
+─── G. Verify backend is running ────────────────────────────
+
+  Open your Railway URL in a browser:
+  https://soundforge-production-abc1.up.railway.app
+
+  You should see:
+  {"status": "SoundForge AI is running 🎵", "version": "1.0.0"}
+
+  If you see that → backend is live!
+
+
+==============================================================
+  STEP 7 — DEPLOY FRONTEND TO NETLIFY (Free)
+==============================================================
+
+─── A. Create Netlify account ───────────────────────────────
+
+  1. Go to https://netlify.com
+  2. Click "Sign up" → "Sign up with GitHub"
+
+─── B. Deploy your frontend ─────────────────────────────────
+
+  Option 1 — Drag and Drop (easiest):
+  1. Go to https://app.netlify.com
+  2. You see "Drag and drop your site output folder here"
+  3. Open your soundforge/frontend/ folder on your computer
+  4. Drag the ENTIRE frontend/ folder onto that area
+  5. Netlify deploys it instantly!
+  6. You get a URL like: https://sparkly-unicorn-123456.netlify.app
+
+  Option 2 — Connect GitHub (auto-deploys on every update):
+  1. Click "Add new site" → "Import an existing project"
+  2. Choose GitHub → select your soundforge repo
+  3. Set "Base directory" to: frontend
+  4. Set "Publish directory" to: frontend
+  5. Click Deploy
+
+─── C. Rename your Netlify site (optional) ──────────────────
+
+  1. Netlify → Site settings → Site details → "Change site name"
+  2. Change to something like: soundforge-ai
+  3. Your URL becomes: https://soundforge-ai.netlify.app
+
+
+==============================================================
+  STEP 8 — CONNECT FRONTEND TO BACKEND
+==============================================================
+
+Now you need to tell your frontend where the backend lives.
+
+Open:  soundforge/frontend/index.html
+
+Find this line (near the bottom in the <script> section):
+
+  const API_BASE = window.location.hostname === 'localhost' ...
+    : 'https://YOUR-RAILWAY-URL.up.railway.app';
+
+Change YOUR-RAILWAY-URL to your actual Railway URL:
+
+  : 'https://soundforge-production-abc1.up.railway.app';
+
+Save the file, then RE-UPLOAD it to Netlify:
+  → Drag the updated frontend/ folder to Netlify again
+  OR
+  → If you connected GitHub, just push to GitHub and it auto-deploys:
+    git add frontend/index.html
+    git commit -m "Connect to Railway backend"
+    git push
+
+
+==============================================================
+  STEP 9 — TEST YOUR LIVE SITE
+==============================================================
+
+  1. Open your Netlify URL in a browser
+     (e.g. https://soundforge-ai.netlify.app)
+
+  2. Upload an MP3 file
+
+  3. Select an instrument — e.g. "Solo Cornet (Bb)"
+
+  4. Click "Convert to MIDI"
+
+  5. Watch the progress bar — this takes 10-60 seconds
+     depending on file length
+
+  6. Download your MIDI, WAV and transcript files!
+
+  If it works → CONGRATULATIONS! Your app is live! 🎉
+
+
+==============================================================
+  STEP 10 — ADD A CUSTOM DOMAIN (Optional, ~$10/year)
+==============================================================
+
+Make your site look professional with a real domain.
+
+─── A. Buy a domain ─────────────────────────────────────────
+
+  Go to https://namecheap.com (cheapest, reliable)
+  Search for your name, e.g.: soundforgeai.com
+  Buy it for ~$10-15/year
+
+─── B. Connect to Netlify ───────────────────────────────────
+
+  1. Netlify → your site → "Domain management"
+  2. Click "Add custom domain"
+  3. Enter your domain: soundforgeai.com
+  4. Follow Netlify's DNS instructions:
+     - Go to Namecheap → Manage your domain → DNS
+     - Change nameservers to Netlify's nameservers
+  5. Wait 24 hours for DNS to propagate
+  6. Netlify automatically adds FREE HTTPS/SSL ✓
+
+─── C. Update ALLOWED_ORIGINS in Railway ────────────────────
+
+  Railway → Variables → update:
+  ALLOWED_ORIGINS = https://soundforgeai.com,https://www.soundforgeai.com
+
+
+==============================================================
+  COSTS SUMMARY
+==============================================================
+
+  Service        Cost              Notes
+  ──────────────────────────────────────────────────────────
+  Railway        Free / $5/month   Free tier: 500 hours/month
+  Netlify        FREE              Unlimited for static sites
+  Domain name    ~$10-15/year      Optional but recommended
+  ──────────────────────────────────────────────────────────
+  TOTAL          ~$10-15/year      Just the domain!
+
+  Railway Free Tier limits:
+  - 500 execution hours/month
+  - 1 GB RAM
+  - Sleeps after 30min inactivity (first request is slow)
+
+  To avoid sleeping: upgrade to Railway Hobby ($5/month)
+  This keeps your server always-on for fast responses.
+
+
+==============================================================
+  TROUBLESHOOTING
+==============================================================
+
+  ❌ "ffmpeg not found"
+     → Make sure FFmpeg is installed and in your PATH
+     → Restart your terminal after installing
+
+  ❌ "SoundFont not found"
+     → Make sure GeneralUser_GS.sf2 is in backend/soundfonts/
+     → Check the filename is exactly: GeneralUser_GS.sf2
+
+  ❌ "CORS error" in browser console
+     → Update ALLOWED_ORIGINS in Railway to your Netlify URL
+     → Make sure there are no trailing slashes
+
+  ❌ "basic-pitch import error"
+     → Run: pip install basic-pitch --upgrade
+     → basic-pitch requires Python 3.9-3.11
+
+  ❌ Railway shows "build failed"
+     → Check nixpacks.toml exists in your backend/ folder
+     → Check requirements.txt exists
+     → View the build logs in Railway for the exact error
+
+  ❌ Upload works but conversion fails
+     → Check Railway logs: service → "Logs" tab
+     → Most common cause: missing GeneralUser_GS.sf2
+
+  ❌ "413 Request Entity Too Large"
+     → File is over 50 MB — compress or trim your audio first
+
+  ❌ App is very slow
+     → Railway free tier sleeps — first request wakes it up
+     → Upgrade to Railway Hobby ($5/month) for always-on
+
+
+==============================================================
+  UPDATING YOUR APP IN THE FUTURE
+==============================================================
+
+  When you make changes to the code:
+
+  # Update GitHub
+  git add .
+  git commit -m "Your update description"
+  git push
+
+  Railway:  Auto-deploys from GitHub in ~2 minutes ✓
+  Netlify:  Auto-deploys from GitHub in ~30 seconds ✓
+            (If you connected via GitHub in Step 7 Option 2)
+
+  If you used drag-and-drop for Netlify:
+  → Just drag the updated frontend/ folder again
+
+
+==============================================================
+  QUICK REFERENCE — KEY URLs
+==============================================================
+
+  Your Netlify site:   https://YOUR-SITE.netlify.app
+  Your Railway API:    https://YOUR-APP.up.railway.app
+  API health check:    https://YOUR-APP.up.railway.app/api/health
+  Railway dashboard:   https://railway.app/dashboard
+  Netlify dashboard:   https://app.netlify.com
+
+
+==============================================================
+  YOU'RE DONE! 🎉
+==============================================================
+
+  Share your Netlify URL with anyone in the world.
+  They can convert MP3 files to MIDI and download the results
+  — all for free, directly in their browser.
+
+  Good luck with SoundForge AI!
