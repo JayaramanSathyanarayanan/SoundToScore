@@ -4,10 +4,6 @@ SoundForge AI — FastAPI Backend
 Run locally:  uvicorn app:app --reload --port 8000
 Deploy:       See DEPLOYMENT_GUIDE.md
 """
-from flask_cors import CORS
-CORS(app)
-import os, uuid, shutil, time, logging, asyncio
-from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,11 +35,14 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS — change to your Netlify URL in production ───────────
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+ALLOWED_ORIGINS = [
+    "https://stalwart-pie-03a6c9.netlify.app"
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET", "POST"],
+    allow_credentials=True,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
