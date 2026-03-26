@@ -536,10 +536,7 @@ function drawWave(f){
   }
 }
 
-// ── CONFIG — change this to your Railway URL after deploying ──
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:8000'
-  : 'https://YOUR-RAILWAY-URL.up.railway.app';   // ← CHANGE THIS
+const API_BASE = window.location.origin;  // ← CHANGE THIS
 
 // Convert — calls real backend
 async function startConvert(){
@@ -582,9 +579,9 @@ async function startConvert(){
     setP(100);
     await new Promise(r=>setTimeout(r,300));
     showRealResults(data);
-    showToast('🎉 Done! Files ready','ok');
+    showToast('Done! Files ready','ok');
   }catch(err){
-    showToast('❌ '+err.message,'err');
+    showToast(err.message,'err');
     document.getElementById('progCard').classList.remove('show');
   }finally{
     btn.disabled=false;btn.textContent='⚡  Convert Again';
