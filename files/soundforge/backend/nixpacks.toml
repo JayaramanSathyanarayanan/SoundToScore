@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["ffmpeg", "fluidsynth", "python311"]
+nixPkgs = ["ffmpeg", "fluidsynth", "aubio", "python311"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
