@@ -4,6 +4,8 @@ SoundForge AI — FastAPI Backend
 Run locally:  uvicorn app:app --reload --port 8000
 Deploy:       See DEPLOYMENT_GUIDE.md
 """
+import os, uuid, shutil, time, logging, asyncio
+from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
