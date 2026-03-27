@@ -168,3 +168,4 @@ def _group_notes(notes_data, hop_size=0.01162, min_duration=0.05):
         notes.append(note)
 
     return notes
+
