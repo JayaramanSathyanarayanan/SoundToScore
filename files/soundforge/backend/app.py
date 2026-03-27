@@ -37,9 +37,25 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS — change to your Netlify URL in production ───────────
-ALLOWED_ORIGINS = [
-    "https://stalwart-pie-03a6c9.netlify.app"
-]
+import os
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+```
+
+Click **Commit changes** — Render auto-redeploys.
+
+---
+
+## ✅ Why downloads don't work & audio doesn't play
+
+Both fail because the frontend is calling `https://soundtoscore.onrender.com` but your browser blocks it due to **CORS** — the backend doesn't know your Netlify URL yet. Once you complete Steps 1 and 2 above, both will work automatically.
+
+---
+
+## ✅ Step 4 — Also fix Render Root Directory
+
+Render → SoundToScore → **Settings** → **Root Directory** → set:
+```
+files/soundforge/backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
