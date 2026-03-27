@@ -147,3 +147,4 @@ async def _cleanup(job_dir: str, delay: int = 3600):
     await asyncio.sleep(delay)
     shutil.rmtree(job_dir, ignore_errors=True)
     log.info(f"Cleaned: {job_dir}")
+
