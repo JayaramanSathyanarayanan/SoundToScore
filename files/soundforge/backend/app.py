@@ -33,7 +33,7 @@ OUTPUT_DIR = Path("outputs")
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-MAX_BYTES = 50 * 1024 * 1024
+MAX_BYTES = 20 * 1024 * 1024  # 20MB limit to save RAM
 
 VALID_INSTRUMENTS = {
     "trumpet", "flute", "soprano_cornet", "solo_cornet", "repiano_cornet",
@@ -76,7 +76,7 @@ async def convert(
 
     data = await file.read()
     if len(data) > MAX_BYTES:
-        raise HTTPException(413, "File too large. Max 50MB.")
+        raise HTTPException(413, "File too large. Max 20MB on free tier.")
 
     job_id = uuid.uuid4().hex[:10]
     job_dir = OUTPUT_DIR / job_id
