@@ -3,6 +3,8 @@ uvicorn[standard]==0.29.0
 python-multipart==0.0.9
 pretty_midi==0.2.10
 librosa==0.10.1
+soundfile==0.12.1
 numpy==1.26.4
 slowapi==0.1.9
+
 
