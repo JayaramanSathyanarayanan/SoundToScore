@@ -1,9 +1,10 @@
 [phases.setup]
-nixPkgs = ["ffmpeg", "fluidsynth", "aubio", "python311"]
+nixPkgs = ["ffmpeg", "fluidsynth", "python311", "libsndfile"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
 
 [start]
 cmd = "uvicorn app:app --host 0.0.0.0 --port $PORT"
+
 
