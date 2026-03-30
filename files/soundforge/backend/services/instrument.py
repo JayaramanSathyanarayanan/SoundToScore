@@ -16,7 +16,7 @@ SF_DIR  = Path("soundfonts")
 SF_FILE = SF_DIR / "GeneralUser_GS.sf2"
 SF_DIR.mkdir(exist_ok=True)
 
-SF_MIRRORS = [SF_MIRRORS = [
+SF_MIRRORS = [
     "https://drive.google.com/uc?export=download&id=1nVv5lw1vriViTil7ywpzOITUjiz-wlGh"
 ]
 
