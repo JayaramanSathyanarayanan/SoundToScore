@@ -19,7 +19,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 
 UPLOAD_DIR = Path("uploads"); UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR = Path("outputs"); OUTPUT_DIR.mkdir(exist_ok=True)
-CHUNK_SEC  = 20
+CHUNK_SEC  = 10
 MAX_BYTES  = 100 * 1024 * 1024
 
 VALID = {
@@ -100,6 +100,7 @@ async def process_job(job_id, src, instrument, tempo, output_fmt):
         results = []
 
         for ci in range(n_chunks):
+            log.info(f"Processing chunk {ci+1}/{n_chunks}")
             cy = y[ci*csamp : min((ci+1)*csamp, len(y))]
 
             cd = job_dir / f"s{ci+1}"
@@ -128,7 +129,11 @@ async def process_job(job_id, src, instrument, tempo, output_fmt):
 
             jobs[job_id]["chunks"] = results
 
-        jobs[job_id]["status"] = "done"
+        if results:
+           jobs[job_id]["status"] = "done"
+        else:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["error"] = "No chunks generated"
 
     except Exception as e:
         jobs[job_id]["status"] = "error"
