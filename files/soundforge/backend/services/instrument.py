@@ -16,10 +16,8 @@ SF_DIR  = Path("soundfonts")
 SF_FILE = SF_DIR / "GeneralUser_GS.sf2"
 SF_DIR.mkdir(exist_ok=True)
 
-SF_MIRRORS = [
-    "https://github.com/mrbumpy409/GeneralUser-GS/raw/master/GeneralUser%20GS%20v1.471.sf2",
-    "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/master/GeneralUser%20GS%20v1.471.sf2",
-    "https://musical-artifacts.com/artifacts/153/GeneralUser_GS_v1.471.sf2",
+SF_MIRRORS = [SF_MIRRORS = [
+    "https://drive.google.com/uc?export=download&id=1nVv5lw1vriViTil7ywpzOITUjiz-wlGh"
 ]
 
 MIN_SF_BYTES = 5 * 1024 * 1024  # valid SF2 > 5MB
@@ -33,7 +31,7 @@ def ensure_soundfont() -> str:
     if _sf_valid():
         return str(SF_FILE)
 
-    log.warning("SoundFont missing or corrupt — attempting download...")
+    log.warning("SoundFont missing — downloading from Google Drive...")
     for url in SF_MIRRORS:
         try:
             log.info(f"Trying: {url}")
