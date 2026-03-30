@@ -1,6 +1,9 @@
 """
-services/instrument.py — MIDI to audio via FluidSynth
-SoundFont auto-downloaded at startup with 3 reliable mirrors.
+services/instrument.py
+MIDI -> audio via FluidSynth.
+SoundFont: downloaded from Google Drive at startup.
+Place your GeneralUser_GS.sf2 on Google Drive, share as "Anyone with link can view",
+then paste the file ID below.
 """
 import subprocess, logging, urllib.request
 from pathlib import Path
@@ -11,13 +14,19 @@ SF_DIR  = Path("soundfonts")
 SF_FILE = SF_DIR / "GeneralUser_GS.sf2"
 SF_DIR.mkdir(exist_ok=True)
 
-# Three reliable mirrors — first GitHub raw, then others
+# ── YOUR GOOGLE DRIVE FILE ID ─────────────────────────────────
+# Get this from your Drive share link:
+# https://drive.google.com/file/d/XXXXX/view  → XXXXX is the ID
+GDRIVE_FILE_ID = "1nVv5lw1vriViTil7ywpzOITUjiz-wlGh"
+
+# Fallback public mirrors if Drive fails
 SF_MIRRORS = [
+    f"https://drive.google.com/uc?export=download&id={GDRIVE_FILE_ID}&confirm=t",
+    f"https://docs.google.com/uc?export=download&id={GDRIVE_FILE_ID}",
     "https://github.com/fkarg/GeneralUserGS/releases/download/v1.471/GeneralUser_GS_v1.471.sf2",
-    "https://github.com/mrbumpy409/GeneralUser-GS/raw/master/GeneralUser%20GS%20v1.471.sf2",
-    "https://keymusician01.s3.amazonaws.com/GeneralUser_GS.sf2",
 ]
-MIN_SIZE = 5 * 1024 * 1024   # >5 MB = valid
+
+MIN_SIZE = 5 * 1024 * 1024
 
 
 def _valid() -> bool:
@@ -28,24 +37,39 @@ def ensure_soundfont() -> str:
     if _valid():
         return str(SF_FILE)
 
-    log.warning("SoundFont missing — downloading...")
+    log.warning("SoundFont not found — downloading...")
     for url in SF_MIRRORS:
         try:
-            log.info(f"Trying: {url}")
-            req = urllib.request.Request(url, headers={"User-Agent": "SoundToScore/3.0"})
-            with urllib.request.urlopen(req, timeout=120) as r:
+            log.info(f"Trying: {url[:60]}...")
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 SoundToScore/3.0",
+                    "Accept": "*/*",
+                }
+            )
+            with urllib.request.urlopen(req, timeout=180) as r:
+                # Handle Google Drive large-file confirmation
+                content_type = r.headers.get("Content-Type", "")
                 raw = r.read()
+
+            # If Google returned an HTML confirmation page, skip
+            if b"<!DOCTYPE" in raw[:100] or b"<html" in raw[:100]:
+                log.warning("Got HTML instead of SF2 (Drive confirmation page) — trying next")
+                continue
+
             if len(raw) > MIN_SIZE:
                 SF_FILE.write_bytes(raw)
-                log.info(f"SoundFont saved ({len(raw)//1024//1024} MB)")
+                log.info(f"SoundFont saved: {len(raw)//1024//1024} MB")
                 return str(SF_FILE)
-            log.warning(f"Too small ({len(raw)} bytes), skipping")
+            log.warning(f"File too small ({len(raw)} bytes)")
         except Exception as e:
             log.warning(f"Mirror failed: {e}")
 
     raise RuntimeError(
         "Could not download SoundFont. "
-        "Manually place GeneralUser_GS.sf2 in the soundfonts/ folder."
+        "Please upload GeneralUser_GS.sf2 via Render Shell: "
+        "mkdir -p soundfonts && curl -L YOUR_URL -o soundfonts/GeneralUser_GS.sf2"
     )
 
 
