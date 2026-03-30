@@ -466,82 +466,47 @@ const API='https://soundtoscore.onrender.com';
 
 async function doConvert(){
   if(!selFile){showToast('Please select a file first','err');return}
-
   const btn=document.getElementById('cvtBtn');
-  btn.disabled=true;
-  btn.textContent='Processing...';
-
+  btn.disabled=true;btn.textContent='Processing...';
   document.getElementById('progCard').classList.add('on');
   document.getElementById('res').classList.remove('on');
   document.getElementById('chunks').innerHTML='';
-
   for(let i=1;i<=4;i++){markStep(i,'');stepTime(i,'--')}
   setP(0);
-
+  const t0=performance.now();
   try{
-    // STEP 1 — send file
-    markStep(1,'active');setP(10);
-
+    markStep(1,'active');setP(8);
     const fd=new FormData();
     fd.append('file',selFile,selFile.name);
     fd.append('instrument',selInstr);
     fd.append('tempo',document.getElementById('tempoR').value);
     fd.append('output_fmt',document.getElementById('fmtSel').value);
-
-    const res=await fetch(API+'/api/convert',{method:'POST',body:fd});
-    const { job_id } = await res.json();
-
-    markStep(1,'done');setP(20);
-
-    // STEP 2 — start polling
-    markStep(2,'active');
+    markStep(1,'done');stepTime(1,elapsed(t0));setP(15);
+    markStep(2,'active');setP(20);
     markStep(3,'active');
-
-    const interval=setInterval(async ()=>{
-      try{
-        const r=await fetch(API+'/api/status/'+job_id);
-        const data=await r.json();
-
-        // 🔥 update progress
-        if(data.total>0){
-          const pct=(data.chunks.length/data.total)*100;
-          setP(20 + pct*0.7);
-        }
-
-        // 🔥 render partial chunks LIVE
-        if(data.chunks){
-          renderChunksLive(data.chunks);
-          markStep(4,'active');
-        }
-
-        if(data.status==="done"){
-          clearInterval(interval);
-
-          markStep(2,'done');
-          markStep(3,'done');
-          markStep(4,'done');
-
-          setP(100);
-          showToast("Conversion complete ✅","ok");
-          btn.textContent='Convert Again';
-          btn.disabled=false;
-        }
-
-        if(data.status==="error"){
-          clearInterval(interval);
-          throw new Error(data.error || "Processing failed");
-        }
-
-      }catch(e){
-        clearInterval(interval);
-        showToast("Error: "+e.message,'err');
-        btn.disabled=false;
-      }
-    },2000);
-
+    let pct=20;
+    const anim=setInterval(()=>{if(pct<82){pct+=0.22;setP(pct)}},200);
+    const res=await fetch(API+'/api/convert',{method:'POST',body:fd});
+    clearInterval(anim);
+    if(!res.ok){
+      const e=await res.json().catch(()=>({detail:'Server error '+res.status}));
+      throw new Error(e.detail||'Server error '+res.status);
+    }
+    const data=await res.json();
+    markStep(2,'done');stepTime(2,elapsed(t0));
+    markStep(3,'done');stepTime(3,elapsed(t0));
+    setP(90);
+    markStep(4,'active');
+    if(data.quality_warning){document.getElementById('wtxt').textContent=data.quality_warning;document.getElementById('wbox').classList.add('on')}
+    renderResults(data);
+    markStep(4,'done');stepTime(4,elapsed(t0));
+    setP(100);
+    showToast('Done! '+data.total_chunks+' section(s) ready','ok');
   }catch(err){
     showToast('Error: '+err.message,'err');
-    btn.disabled=false;
+    document.getElementById('progCard').classList.remove('on');
+  }finally{
+    btn.disabled=false;btn.textContent='&#9889; Convert Again';
   }
 }
 
@@ -627,27 +592,7 @@ function showToast(msg,type){
   const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'')+' on';
   setTimeout(()=>t.classList.remove('on'),3500);
 }
-function renderChunksLive(chunks){
-  const cont=document.getElementById('chunks');
-  cont.innerHTML='';
-
-  chunks.forEach((chunk,idx)=>{
-    const div=document.createElement('div');
-    div.style.marginBottom="10px";
-
-    div.innerHTML=`
-      <div style="padding:10px;border:1px solid #333;border-radius:8px">
-        <b>Chunk ${chunk.chunk}</b><br>
-        <audio controls src="${API + chunk.audio}"></audio><br>
-        <a href="${API + chunk.midi}" target="_blank">Download MIDI</a><br>
-        <span>${chunk.transcript}</span>
-      </div>
-    `;
-
-    cont.appendChild(div);
-  });
-
-  document.getElementById('res').classList.add('on');
+// renderChunksLive removed — renderResults handles display
 }
 </script>
 </body>
