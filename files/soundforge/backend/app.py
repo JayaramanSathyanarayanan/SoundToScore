@@ -1,43 +1,26 @@
-import os
-import uuid
-import shutil
-import time
-import logging
-import asyncio
+import os, uuid, shutil, time, logging, asyncio
 from pathlib import Path
-
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-
-from services.convert import mp3_to_wav
-from services.midi import wav_chunk_to_midi
-from services.instrument import midi_to_audio
+from services.convert    import mp3_to_wav
+from services.midi       import wav_chunk_to_midi
+from services.instrument import midi_to_audio, ensure_soundfont
 from services.transcript import generate_transcript
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("soundtoscore")
 
-app = FastAPI(title="SoundToScore API", version="2.0.0")
+app = FastAPI(title="SoundToScore", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"],
+                   allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+UPLOAD_DIR = Path("uploads"); UPLOAD_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR = Path("outputs"); OUTPUT_DIR.mkdir(exist_ok=True)
+CHUNK_SEC  = 20
+MAX_BYTES  = 100 * 1024 * 1024
 
-UPLOAD_DIR = Path("uploads")
-OUTPUT_DIR = Path("outputs")
-UPLOAD_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
-
-CHUNK_SECONDS = 20
-MAX_BYTES = 100 * 1024 * 1024  # 100MB (browser compresses first)
-
-VALID_INSTRUMENTS = {
+VALID = {
     "trumpet","flute","soprano_cornet","solo_cornet","repiano_cornet",
     "cornet_2nd","cornet_3rd","flugelhorn","solo_tenor_horn","tenor_horn_1st",
     "tenor_horn_2nd","baritone_1st","baritone_2nd","trombone_1st","trombone_2nd",
@@ -46,150 +29,115 @@ VALID_INSTRUMENTS = {
     "snare_drum","bass_drum","cymbals","triangle","tambourine",
 }
 
+@app.on_event("startup")
+async def startup():
+    try:
+        log.info("Startup: checking SoundFont...")
+        ensure_soundfont()
+        log.info("SoundFont ready.")
+    except Exception as e:
+        log.error(f"SoundFont startup error: {e}")
 
 @app.get("/")
-def health():
-    return {"status": "SoundToScore is running", "version": "2.0.0"}
-
+def root():
+    sf_ok = Path("soundfonts/GeneralUser_GS.sf2").exists()
+    return {"status": "SoundToScore running", "version": "2.0.0", "soundfont": sf_ok}
 
 @app.get("/api/health")
-def api_health():
-    return {"ok": True}
-
+def health():
+    sf_ok = Path("soundfonts/GeneralUser_GS.sf2").exists()
+    return {"ok": True, "soundfont_ready": sf_ok}
 
 @app.post("/api/convert")
 async def convert(
-    request: Request,
-    background: BackgroundTasks,
+    request: Request, background: BackgroundTasks,
     file: UploadFile = File(...),
-    instrument: str = Form("solo_cornet"),
-    tempo: int = Form(120),
-    output_fmt: str = Form("wav"),
+    instrument: str  = Form("solo_cornet"),
+    tempo: int       = Form(120),
+    output_fmt: str  = Form("wav"),
 ):
-    if instrument not in VALID_INSTRUMENTS:
+    if instrument not in VALID:
         raise HTTPException(400, f"Unknown instrument: {instrument}")
-
-    original_name = file.filename or "upload"
-    ext = Path(original_name).suffix.lower()
-    if ext not in {".mp3", ".wav", ".m4a", ".ogg", ".flac"}:
-        raise HTTPException(400, f"Unsupported file type: {ext}")
+    ext = Path(file.filename or "x").suffix.lower()
+    if ext not in {".mp3",".wav",".m4a",".ogg",".flac"}:
+        raise HTTPException(400, f"Unsupported: {ext}")
 
     data = await file.read()
     if len(data) > MAX_BYTES:
-        raise HTTPException(413, "File too large even after compression.")
+        raise HTTPException(413, "File too large (max 100MB)")
 
-    job_id = uuid.uuid4().hex[:10]
+    job_id  = uuid.uuid4().hex[:10]
     job_dir = OUTPUT_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True)
+    src = UPLOAD_DIR / f"{job_id}{ext}"
+    src.write_bytes(data)
 
-    src_path = UPLOAD_DIR / f"{job_id}_input{ext}"
-    src_path.write_bytes(data)
-
-    quality_warning = None
-    file_kb = len(data) / 1024
-    if file_kb < 500:
-        quality_warning = "Low-quality audio detected. Accuracy may be reduced."
-
-    log.info(f"[{job_id}] {len(data)/1024:.1f}KB instrument={instrument}")
+    warn = "Low-quality audio detected — accuracy may be reduced." if len(data) < 300_000 else None
+    log.info(f"[{job_id}] {len(data)/1024:.0f}KB inst={instrument}")
     t0 = time.time()
 
     try:
-        # Step 1: Convert to WAV
-        wav_path = job_dir / "full_audio.wav"
-        mp3_to_wav(str(src_path), str(wav_path))
+        import librosa, soundfile as sf, numpy as np
 
-        # Step 2: Split into chunks and process each
-        import librosa
-        import soundfile as sf
-        import numpy as np
+        wav = job_dir / "full.wav"
+        mp3_to_wav(str(src), str(wav))
 
-        y, sr = librosa.load(str(wav_path), sr=16000, mono=True)
-        duration = len(y) / sr
-        chunk_samples = CHUNK_SECONDS * sr
-        total_chunks = max(1, int(np.ceil(len(y) / chunk_samples)))
+        y, sr = librosa.load(str(wav), sr=16000, mono=True)
+        dur   = len(y) / sr
+        csamp = int(CHUNK_SEC * sr)
+        n_chunks = max(1, int(np.ceil(len(y) / csamp)))
+        log.info(f"[{job_id}] {dur:.1f}s => {n_chunks} sections")
 
-        log.info(f"[{job_id}] Duration={duration:.1f}s chunks={total_chunks}")
+        results = []
+        for ci in range(n_chunks):
+            cy  = y[ci*csamp : min((ci+1)*csamp, len(y))]
+            cst = ci * CHUNK_SEC
+            cen = min(cst + CHUNK_SEC, dur)
+            cd  = job_dir / f"s{ci+1}"; cd.mkdir()
 
-        chunks_result = []
+            cw = cd / "audio.wav"; sf.write(str(cw), cy, sr)
+            cm = cd / "out.mid";   wav_chunk_to_midi(str(cw), str(cm), sr=sr, tempo=tempo)
+            rn = f"out_{instrument}.{output_fmt}"
+            rp = cd / rn;          midi_to_audio(str(cm), str(rp), instrument=instrument, fmt=output_fmt)
+            tp = cd / "notes.txt"; txt = generate_transcript(str(cm), str(tp), tempo=tempo)
+            del cy
 
-        for chunk_idx in range(total_chunks):
-            start_sample = chunk_idx * chunk_samples
-            end_sample = min(start_sample + chunk_samples, len(y))
-            chunk_y = y[start_sample:end_sample]
-
-            chunk_start_sec = chunk_idx * CHUNK_SECONDS
-            chunk_end_sec = min(chunk_start_sec + CHUNK_SECONDS, duration)
-
-            chunk_dir = job_dir / f"chunk_{chunk_idx+1}"
-            chunk_dir.mkdir(exist_ok=True)
-
-            # Save chunk WAV
-            chunk_wav = chunk_dir / "audio.wav"
-            sf.write(str(chunk_wav), chunk_y, sr)
-
-            # WAV -> MIDI
-            chunk_midi = chunk_dir / "output.mid"
-            wav_chunk_to_midi(str(chunk_wav), str(chunk_midi), sr=sr, tempo=tempo)
-
-            # MIDI -> Instrument audio
-            rendered_name = f"output_{instrument}.{output_fmt}"
-            rendered_path = chunk_dir / rendered_name
-            midi_to_audio(str(chunk_midi), str(rendered_path), instrument=instrument, fmt=output_fmt)
-
-            # Transcript
-            transcript_path = chunk_dir / "notes.txt"
-            transcript_text = generate_transcript(str(chunk_midi), str(transcript_path), tempo=tempo)
-
-            base = f"/api/download/{job_id}/chunk_{chunk_idx+1}"
-            chunks_result.append({
-                "chunk": chunk_idx + 1,
-                "start": round(chunk_start_sec, 1),
-                "end": round(chunk_end_sec, 1),
-                "audio": f"{base}/{rendered_name}",
-                "midi": f"{base}/output.mid",
+            base = f"/api/files/{job_id}/s{ci+1}"
+            results.append({
+                "chunk": ci+1,
+                "start": round(cst,1), "end": round(cen,1),
+                "audio":      f"{base}/{rn}",
+                "midi":       f"{base}/out.mid",
                 "transcript": f"{base}/notes.txt",
-                "transcript_preview": transcript_text[:300] if transcript_text else "",
+                "transcript_preview": (txt or "")[:400],
             })
-
-            # Free memory immediately
-            del chunk_y
-            log.info(f"[{job_id}] Chunk {chunk_idx+1}/{total_chunks} done")
-
+            log.info(f"[{job_id}] section {ci+1}/{n_chunks} done")
         del y
 
     except Exception as exc:
-        log.error(f"[{job_id}] Failed: {exc}")
+        log.error(f"[{job_id}] {exc}")
         shutil.rmtree(job_dir, ignore_errors=True)
-        raise HTTPException(500, f"Processing error: {exc}")
+        raise HTTPException(500, str(exc))
     finally:
-        src_path.unlink(missing_ok=True)
+        src.unlink(missing_ok=True)
 
-    background.add_task(_cleanup, str(job_dir))
-
+    background.add_task(_clean, str(job_dir))
     return JSONResponse({
-        "job_id": job_id,
-        "status": "success",
-        "elapsed": round(time.time() - t0, 2),
-        "total_chunks": total_chunks,
-        "duration": round(duration, 1),
-        "quality_warning": quality_warning,
-        "chunks": chunks_result,
+        "job_id": job_id, "status": "success",
+        "elapsed": round(time.time()-t0,2),
+        "total_chunks": n_chunks, "duration": round(dur,1),
+        "quality_warning": warn, "chunks": results,
     })
 
-
-@app.get("/api/download/{job_id}/{chunk_folder}/{filename}")
-def download_chunk(job_id: str, chunk_folder: str, filename: str):
-    if not job_id.isalnum():
-        raise HTTPException(400, "Invalid job ID")
-    if ".." in filename or "/" in filename or ".." in chunk_folder:
+@app.get("/api/files/{job_id}/{sec}/{filename}")
+def serve(job_id: str, sec: str, filename: str):
+    if not job_id.isalnum() or ".." in sec or ".." in filename:
         raise HTTPException(400, "Invalid path")
-    path = OUTPUT_DIR / job_id / chunk_folder / filename
-    if not path.exists():
-        raise HTTPException(404, "File not found or expired")
-    return FileResponse(str(path), filename=filename)
+    p = OUTPUT_DIR / job_id / sec / filename
+    if not p.exists():
+        raise HTTPException(404, "File expired or not found")
+    return FileResponse(str(p), filename=filename)
 
-
-async def _cleanup(job_dir: str, delay: int = 7200):
+async def _clean(d: str, delay: int = 7200):
     await asyncio.sleep(delay)
-    shutil.rmtree(job_dir, ignore_errors=True)
-    log.info(f"Cleaned: {job_dir}")
+    shutil.rmtree(d, ignore_errors=True)
