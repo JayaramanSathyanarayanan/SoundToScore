@@ -1,8 +1,8 @@
-import os, uuid, shutil, time, logging, asyncio
+import os, uuid, shutil, time, logging, asyncio, json
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from services.convert    import mp3_to_wav
 from services.midi       import wav_chunk_to_midi
 from services.instrument import midi_to_audio, ensure_soundfont
@@ -51,7 +51,6 @@ def health():
 @app.post("/api/convert")
 async def convert(
     request: Request,
-    background: BackgroundTasks,
     file: UploadFile = File(...),
     instrument: str  = Form("solo_cornet"),
     tempo: int       = Form(120),
@@ -76,23 +75,42 @@ async def convert(
 
     quality_warning = "Low-quality audio — accuracy may vary." if len(data) < 300_000 else None
     log.info(f"[{job_id}] {len(data)//1024}KB inst={instrument}")
+
+    # Return a streaming NDJSON response
+    # Each completed chunk is sent immediately as a JSON line
+    return StreamingResponse(
+        _process_stream(job_id, job_dir, src, instrument, tempo, output_fmt, quality_warning),
+        media_type="application/x-ndjson",
+        headers={"X-Job-Id": job_id},
+    )
+
+
+async def _process_stream(job_id, job_dir, src, instrument, tempo, output_fmt, quality_warning):
+    """Generator that yields JSON lines as each chunk completes."""
+    import librosa, soundfile as sf, numpy as np
+
     t0 = time.time()
 
+    def emit(obj: dict) -> str:
+        return json.dumps(obj) + "\n"
+
     try:
-        import librosa, soundfile as sf, numpy as np
-
-        # Step 1: to WAV
+        # Step 1: convert to WAV
         wav = job_dir / "full.wav"
-        mp3_to_wav(str(src), str(wav))
+        await asyncio.get_event_loop().run_in_executor(
+            None, lambda: mp3_to_wav(str(src), str(wav))
+        )
 
-        # Step 2: load + split
-        y, sr = librosa.load(str(wav), sr=16000, mono=True)
-        dur    = len(y) / sr
-        csamp  = int(CHUNK_SEC * sr)
-        n_ch   = max(1, int(np.ceil(len(y) / csamp)))
+        # Step 2: load audio
+        y, sr = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: librosa.load(str(wav), sr=16000, mono=True)
+        )
+        dur   = len(y) / sr
+        csamp = int(CHUNK_SEC * sr)
+        n_ch  = max(1, int(np.ceil(len(y) / csamp)))
         log.info(f"[{job_id}] {dur:.1f}s => {n_ch} sections")
 
-        results = []
+        # Process each chunk and stream result immediately
         for ci in range(n_ch):
             cy  = y[ci*csamp : min((ci+1)*csamp, len(y))]
             cst = ci * CHUNK_SEC
@@ -100,56 +118,66 @@ async def convert(
             cd  = job_dir / f"s{ci+1}"
             cd.mkdir()
 
-            # write chunk wav
             cw = cd / "audio.wav"
             sf.write(str(cw), cy, sr)
             del cy
 
-            # wav -> midi
             cm = cd / "out.mid"
-            wav_chunk_to_midi(str(cw), str(cm), sr=sr, tempo=tempo)
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda p=str(cw), m=str(cm): wav_chunk_to_midi(p, m, sr=sr, tempo=tempo)
+            )
 
-            # midi -> instrument audio
             rn = f"out_{instrument}.{output_fmt}"
             rp = cd / rn
-            midi_to_audio(str(cm), str(rp), instrument=instrument, fmt=output_fmt)
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda m=str(cm), r=str(rp): midi_to_audio(m, r, instrument=instrument, fmt=output_fmt)
+            )
 
-            # transcript
             tp  = cd / "notes.txt"
-            txt = generate_transcript(str(cm), str(tp), tempo=tempo)
+            txt = await asyncio.get_event_loop().run_in_executor(
+                None, lambda m=str(cm), t=str(tp): generate_transcript(m, t, tempo=tempo)
+            )
 
             base = f"/api/files/{job_id}/s{ci+1}"
-            results.append({
-                "chunk":    ci + 1,
-                "start":    round(cst, 1),
-                "end":      round(cen, 1),
-                "audio":    f"{base}/{rn}",
-                "midi":     f"{base}/out.mid",
-                "transcript":      f"{base}/notes.txt",
+
+            # Yield this chunk immediately
+            yield emit({
+                "type":    "chunk",
+                "chunk":   ci + 1,
+                "total":   n_ch,
+                "start":   round(cst, 1),
+                "end":     round(cen, 1),
+                "audio":   f"{base}/{rn}",
+                "midi":    f"{base}/out.mid",
+                "transcript": f"{base}/notes.txt",
                 "transcript_preview": (txt or "")[:400],
             })
-            log.info(f"[{job_id}] section {ci+1}/{n_ch} done")
+            log.info(f"[{job_id}] section {ci+1}/{n_ch} streamed")
 
         del y
+
+        # Final summary
+        yield emit({
+            "type":         "done",
+            "job_id":       job_id,
+            "status":       "success",
+            "elapsed":      round(time.time() - t0, 2),
+            "total_chunks": n_ch,
+            "duration":     round(dur, 1),
+            "quality_warning": quality_warning,
+        })
+
+        # Schedule cleanup
+        asyncio.create_task(_clean(str(job_dir)))
 
     except Exception as exc:
         log.error(f"[{job_id}] {exc}")
         shutil.rmtree(job_dir, ignore_errors=True)
-        raise HTTPException(500, str(exc))
+        yield emit({"type": "error", "detail": str(exc)})
+
     finally:
         src.unlink(missing_ok=True)
 
-    background.add_task(_clean, str(job_dir))
-
-    return JSONResponse({
-        "job_id":       job_id,
-        "status":       "success",
-        "elapsed":      round(time.time() - t0, 2),
-        "total_chunks": n_ch,
-        "duration":     round(dur, 1),
-        "quality_warning": quality_warning,
-        "chunks":       results,
-    })
 
 @app.get("/api/files/{job_id}/{sec}/{filename}")
 def serve(job_id: str, sec: str, filename: str):
@@ -159,6 +187,7 @@ def serve(job_id: str, sec: str, filename: str):
     if not p.exists():
         raise HTTPException(404, "File not found or expired")
     return FileResponse(str(p), filename=filename)
+
 
 async def _clean(d: str, delay: int = 7200):
     await asyncio.sleep(delay)
