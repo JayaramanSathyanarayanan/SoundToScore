@@ -1,611 +1,602 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>SoundToScore -- MP3 to MIDI Converter</title>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SoundToScore — Brass Band Converter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--ink:#0a0705;--deep:#120e09;--surface:#1a1410;--card:#201810;--border:#2e2318;--gold:#f5a623;--gold2:#ffcc70;--amber:#e8820c;--cream:#f5ecd7;--muted:#7a6048;--green:#4ade80;--red:#f87171;--text:#f0e6d0;--warn:#f59e0b}
-html{scroll-behavior:smooth}
-body{background:var(--ink);color:var(--text);font-family:'Outfit',sans-serif;min-height:100vh;overflow-x:hidden}
-.bg-canvas{position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse 80% 60% at 20% 10%,rgba(245,166,35,0.07) 0%,transparent 60%),radial-gradient(ellipse 60% 80% at 80% 80%,rgba(232,130,12,0.05) 0%,transparent 60%),var(--ink)}
-canvas#bgWave{position:fixed;inset:0;z-index:0;opacity:0.06;width:100%;height:100%}
+:root{--ink:#0a0705;--deep:#120e09;--surf:#1a1410;--card:#1c160d;--border:#2e2318;--gold:#f5a623;--g2:#ffcc70;--amb:#e8820c;--cream:#f5ecd7;--muted:#7a6048;--green:#4ade80;--red:#f87171;--text:#f0e6d0;--warn:#f59e0b;--purple:#c084fc}
+html{scroll-behavior:smooth}body{background:var(--ink);color:var(--text);font-family:'Outfit',sans-serif;min-height:100vh;overflow-x:hidden}
+.bg{position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse 80% 60% at 15% 10%,rgba(245,166,35,.07),transparent 60%),radial-gradient(ellipse 60% 80% at 85% 85%,rgba(232,130,12,.05),transparent 60%),var(--ink)}
+#bgc{position:fixed;inset:0;z-index:0;opacity:.05;width:100%;height:100%}
 .page{position:relative;z-index:1}
-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 48px;position:sticky;top:0;z-index:100;background:rgba(10,7,5,0.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
-.logo{display:flex;align-items:center;gap:12px;font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:700}
-.logo-mark{width:38px;height:38px;border:1.5px solid var(--gold);border-radius:10px;display:grid;place-items:center;background:rgba(245,166,35,0.06);font-size:18px}
-.logo-name{color:var(--cream)}.logo-name span{color:var(--gold)}
-.nav-badge{background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.3);color:var(--gold);padding:5px 14px;border-radius:100px;font-size:0.75rem;font-family:'JetBrains Mono',monospace;letter-spacing:0.06em}
+
+/* NAV */
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 48px;position:sticky;top:0;z-index:100;background:rgba(10,7,5,.93);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:11px;font-family:'Playfair Display',serif;font-size:1.25rem;font-weight:700}
+.lm{width:36px;height:36px;border:1.5px solid var(--gold);border-radius:9px;display:grid;place-items:center;background:rgba(245,166,35,.06);font-size:17px}
+.ln{color:var(--cream)}.ln span{color:var(--gold)}
+.ntag{background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.2);color:var(--gold);padding:5px 14px;border-radius:100px;font-size:.7rem;font-family:'JetBrains Mono',monospace;letter-spacing:.07em}
+
 /* HERO */
-.hero{max-width:900px;margin:0 auto;padding:80px 48px 60px;text-align:center}
-.hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(0,229,255,0.05);border:1px solid rgba(245,166,35,0.2);border-radius:100px;padding:6px 18px;font-size:0.72rem;font-family:'JetBrains Mono',monospace;color:var(--gold);letter-spacing:0.08em;margin-bottom:28px;animation:fadeUp 0.6s ease both}
-.pulse{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse 2s ease-in-out infinite}
-h1{font-family:'Playfair Display',serif;font-size:clamp(2.8rem,6vw,4.8rem);font-weight:900;line-height:1.05;letter-spacing:-0.03em;margin-bottom:20px;animation:fadeUp 0.6s 0.1s ease both;opacity:0}
+.hero{max-width:780px;margin:0 auto;padding:64px 40px 44px;text-align:center}
+.htag{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(245,166,35,.2);border-radius:100px;padding:5px 15px;font-size:.7rem;font-family:'JetBrains Mono',monospace;color:var(--gold);margin-bottom:22px}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:dp 2s ease-in-out infinite}
+h1{font-family:'Playfair Display',serif;font-size:clamp(2.4rem,5vw,4rem);font-weight:900;line-height:1.07;letter-spacing:-.03em;margin-bottom:16px}
 h1 em{font-style:italic;color:var(--gold)}
-.hero-sub{font-size:1.05rem;color:var(--muted);line-height:1.7;max-width:560px;margin:0 auto 16px;animation:fadeUp 0.6s 0.2s ease both;opacity:0}
-.feature-pills{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:48px;animation:fadeUp 0.6s 0.3s ease both;opacity:0}
-.pill{background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:6px 14px;font-size:0.75rem;font-family:'JetBrains Mono',monospace;color:var(--muted)}
-.pill.hi{border-color:rgba(245,166,35,0.3);color:var(--gold);background:rgba(245,166,35,0.05)}
-/* MAIN CARD */
-.main-card{max-width:960px;margin:0 auto;padding:0 24px 80px;animation:fadeUp 0.6s 0.4s ease both;opacity:0}
-.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;margin-bottom:14px}
-.card-lbl{font-family:'JetBrains Mono',monospace;font-size:0.65rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:18px;display:flex;align-items:center;gap:8px}
-.card-lbl::after{content:'';flex:1;height:1px;background:var(--border)}
-/* UPLOAD */
-.drop{border:1.5px dashed var(--border);border-radius:16px;padding:48px 32px;text-align:center;cursor:pointer;transition:all 0.3s;position:relative;overflow:hidden}
-.drop::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 100%,rgba(245,166,35,0.05),transparent 60%);opacity:0;transition:opacity 0.3s}
-.drop:hover,.drop.drag{border-color:var(--gold);background:rgba(245,166,35,0.02)}
-.drop:hover::before,.drop.drag::before{opacity:1}
-.drop-icon{font-size:44px;margin-bottom:14px;display:block;transition:transform 0.3s}
-.drop:hover .drop-icon{transform:translateY(-4px)}
-.drop-title{font-size:1.05rem;font-weight:700;color:var(--cream);margin-bottom:6px}
-.drop-sub{font-size:0.82rem;color:var(--muted);font-family:'JetBrains Mono',monospace}
-.drop-sub strong{color:var(--gold)}
-#fileInput{display:none}
-/* File info */
-.file-info{display:none;align-items:center;gap:14px;padding:14px 18px;border-radius:12px;border:1px solid rgba(245,166,35,0.2);background:rgba(245,166,35,0.04);margin-top:12px}
-.file-info.show{display:flex}
-.fi-icon{font-size:22px}
-.fi-details{flex:1;min-width:0}
-.fi-name{font-weight:700;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--cream)}
-.fi-meta{font-size:0.75rem;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
-.fi-rm{background:none;border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:7px;cursor:pointer;font-size:0.78rem;font-family:'Outfit',sans-serif;transition:all 0.2s}
-.fi-rm:hover{border-color:var(--red);color:var(--red)}
-/* Warning */
-.warn-box{display:none;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);margin-top:10px;font-size:0.82rem;color:var(--warn);font-family:'JetBrains Mono',monospace}
-.warn-box.show{display:flex}
-/* Compress progress */
-.compress-bar-wrap{display:none;margin-top:12px}
-.compress-bar-wrap.show{display:block}
-.compress-label{font-size:0.75rem;font-family:'JetBrains Mono',monospace;color:var(--muted);margin-bottom:6px}
-.compress-track{background:var(--border);border-radius:100px;height:4px;overflow:hidden}
-.compress-fill{height:100%;background:linear-gradient(90deg,var(--amber),var(--gold));width:0%;transition:width 0.3s;border-radius:100px}
-/* Instrument grid */
-.instr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px}
-.instr-cat{grid-column:1/-1;font-family:'JetBrains Mono',monospace;font-size:0.62rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold);padding:6px 2px 3px;border-bottom:1px solid var(--border);margin-bottom:3px}
-.ib{border:1px solid var(--border);border-radius:11px;background:var(--surface);padding:12px 6px;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}
-.ib:hover{border-color:rgba(245,166,35,0.4);background:rgba(245,166,35,0.04)}
-.ib.on{border-color:var(--gold);background:rgba(245,166,35,0.08);box-shadow:0 0 0 1px var(--gold)}
-.ib-em{font-size:22px}.ib-nm{font-size:0.62rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);text-align:center;line-height:1.3}
-.ib.on .ib-nm{color:var(--gold)}
-.ib-key{font-size:0.58rem;font-family:'JetBrains Mono',monospace;color:var(--muted);background:var(--border);padding:1px 4px;border-radius:3px}
-.ib.on .ib-key{background:rgba(245,166,35,0.15);color:var(--gold)}
-/* Settings row */
-.settings-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.sg label{display:block;font-family:'JetBrains Mono',monospace;font-size:0.62rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
-select{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:9px;font-family:'Outfit',sans-serif;font-size:0.875rem;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a6048' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px}
+.hp{font-size:.95rem;color:var(--muted);line-height:1.7;max-width:480px;margin:0 auto 36px}
+
+/* WRAP */
+.wrap{max-width:960px;margin:0 auto;padding:0 22px 80px}
+
+/* CARD */
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;margin-bottom:13px}
+.clbl{font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.clbl::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* DROP ZONE */
+.dz{border:1.5px dashed var(--border);border-radius:13px;padding:42px 24px;text-align:center;cursor:pointer;transition:all .3s;position:relative;overflow:hidden}
+.dz::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 100%,rgba(245,166,35,.05),transparent 60%);opacity:0;transition:opacity .3s}
+.dz:hover,.dz.drag{border-color:var(--gold)}.dz:hover::before,.dz.drag::before{opacity:1}
+.dico{font-size:38px;display:block;margin-bottom:11px;transition:transform .3s}.dz:hover .dico{transform:translateY(-4px)}
+.dt{font-size:.97rem;font-weight:700;color:var(--cream);margin-bottom:5px}
+.ds{font-size:.78rem;color:var(--muted);font-family:'JetBrains Mono',monospace}.ds b{color:var(--gold)}
+#fi{display:none}
+.fpill{display:none;align-items:center;gap:11px;padding:11px 15px;border-radius:10px;border:1px solid rgba(245,166,35,.18);background:rgba(245,166,35,.03);margin-top:11px}
+.fpill.on{display:flex}
+.fpn{font-weight:700;font-size:.86rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--cream)}
+.fpm{font-size:.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.fprm{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:.73rem;transition:all .2s}.fprm:hover{border-color:var(--red);color:var(--red)}
+.wbox{display:none;align-items:center;gap:8px;padding:8px 13px;border-radius:8px;border:1px solid rgba(245,158,11,.22);background:rgba(245,158,11,.05);margin-top:9px;font-size:.77rem;color:var(--warn);font-family:'JetBrains Mono',monospace}
+.wbox.on{display:flex}
+
+/* INSTRUMENT PANEL */
+/* Sub-groups */
+.ig-group{margin-bottom:16px}
+.ig-group:last-child{margin-bottom:0}
+.ig-group-title{font-family:'JetBrains Mono',monospace;font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:5px 2px 4px;border-bottom:1px solid var(--border);margin-bottom:7px;display:flex;align-items:center;justify-content:space-between}
+.ig-group-title .gt-cat{color:var(--gold)}
+.ig-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px}
+.ib{border:1px solid var(--border);border-radius:9px;background:var(--surf);padding:10px 5px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:5px;width:100%;position:relative}
+.ib:hover{border-color:rgba(245,166,35,.35);background:rgba(245,166,35,.03)}
+.ib.on{border-color:var(--gold);background:rgba(245,166,35,.08);box-shadow:0 0 0 1px var(--gold)}
+.iem{font-size:20px}.inm{font-size:.58rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;line-height:1.3}.ib.on .inm{color:var(--gold)}
+.ikey{font-size:.54rem;font-family:'JetBrains Mono',monospace;color:var(--muted);background:var(--border);padding:1px 4px;border-radius:3px}.ib.on .ikey{background:rgba(245,166,35,.15);color:var(--gold)}
+/* Tooltip info button */
+.iinfo{position:absolute;top:3px;right:4px;width:14px;height:14px;border-radius:50%;background:var(--border);display:grid;place-items:center;font-size:8px;color:var(--muted);cursor:pointer;z-index:2}
+.iinfo:hover{background:rgba(245,166,35,.2);color:var(--gold)}
+.tooltip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--ink);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:.66rem;font-family:'JetBrains Mono',monospace;color:var(--cream);white-space:nowrap;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.5);line-height:1.5}
+.tooltip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--border)}
+.ib:hover .iinfo-wrap .tooltip,.iinfo:focus .tooltip{display:block}
+.iinfo-wrap{position:absolute;top:3px;right:4px}
+
+/* SETTINGS */
+.srow{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.sg label{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.lbl-info{width:16px;height:16px;border-radius:50%;background:var(--border);display:grid;place-items:center;font-size:9px;color:var(--muted);cursor:pointer;position:relative;flex-shrink:0}
+.lbl-info:hover{background:rgba(245,166,35,.2);color:var(--gold)}
+.lbl-info .tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 13px;font-size:.68rem;font-family:'JetBrains Mono',monospace;color:var(--cream);white-space:normal;width:220px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.5);line-height:1.7;text-transform:none;letter-spacing:0}
+.lbl-info:hover .tip{display:block}
+select{width:100%;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:10px 13px;border-radius:8px;font-family:'Outfit',sans-serif;font-size:.86rem;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a6048' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:34px}
 select:focus{outline:none;border-color:var(--gold)}
-.range-row{display:flex;align-items:center;gap:10px}
-input[type=range]{-webkit-appearance:none;height:3px;background:var(--border);border-radius:3px;flex:1;cursor:pointer}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--gold);cursor:pointer;box-shadow:0 0 8px rgba(245,166,35,0.5)}
-.rv{font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--gold);min-width:32px;text-align:right}
-/* Convert button */
-.cvt-btn{width:100%;padding:18px;background:linear-gradient(105deg,var(--amber),var(--gold),var(--gold2));border:none;border-radius:14px;color:var(--ink);font-family:'Outfit',sans-serif;font-size:1rem;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;transition:all 0.3s;box-shadow:0 8px 32px rgba(245,166,35,0.2);margin-bottom:14px;position:relative;overflow:hidden}
-.cvt-btn::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:rgba(255,255,255,0.18);transform:skewX(-20deg);transition:left 0.5s}
-.cvt-btn:hover::after{left:140%}
-.cvt-btn:hover{box-shadow:0 12px 40px rgba(245,166,35,0.4);transform:translateY(-2px)}
-.cvt-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none}
-/* Progress */
-.prog-card{display:none}
-.prog-card.show{display:block}
-.step-list{display:flex;flex-direction:column;gap:9px;margin-bottom:20px}
-.step{display:flex;align-items:center;gap:12px;padding:11px 15px;border-radius:11px;border:1px solid var(--border);background:var(--surface);font-size:0.85rem;font-weight:500;transition:all 0.3s}
-.step.active{border-color:rgba(245,166,35,0.35);background:rgba(245,166,35,0.04)}
-.step.done{border-color:rgba(74,222,128,0.3);background:rgba(74,222,128,0.03)}
-.si{width:28px;height:28px;border-radius:50%;background:var(--border);display:grid;place-items:center;font-size:0.68rem;font-family:'JetBrains Mono',monospace;flex-shrink:0;transition:all 0.3s}
-.step.active .si{background:rgba(245,166,35,0.12);border:1px solid var(--gold);color:var(--gold)}
-.step.done .si{background:rgba(74,222,128,0.12);border:1px solid var(--green);color:var(--green)}
+/* Tempo ring */
+.tempo-wrap{display:flex;align-items:center;gap:14px}
+.tempo-ring-wrap{position:relative;width:64px;height:64px;flex-shrink:0}
+.tempo-ring-wrap svg{width:64px;height:64px;transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--border);stroke-width:4}
+.ring-fill{fill:none;stroke:var(--gold);stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset .2s;stroke-dasharray:163;stroke-dashoffset:163}
+.tempo-val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.tv-num{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;color:var(--gold)}
+.tv-lbl{font-size:.44rem;font-family:'JetBrains Mono',monospace;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.tempo-ctrl{flex:1}
+.tempo-ctrl input[type=range]{-webkit-appearance:none;height:3px;background:var(--border);border-radius:3px;width:100%;cursor:pointer}
+.tempo-ctrl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--gold);cursor:pointer;box-shadow:0 0 8px rgba(245,166,35,.5)}
+.tempo-marks{display:flex;justify-content:space-between;font-size:.58rem;font-family:'JetBrains Mono',monospace;color:var(--muted);margin-top:5px}
+.tempo-presets{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.tpreset{background:var(--surf);border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:5px;font-size:.62rem;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all .2s}
+.tpreset:hover{border-color:var(--gold);color:var(--gold)}
+
+/* CONVERT BTN */
+.cvtbtn{width:100%;padding:17px;background:linear-gradient(105deg,var(--amb),var(--gold),var(--g2));border:none;border-radius:13px;color:var(--ink);font-family:'Outfit',sans-serif;font-size:.97rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;transition:all .3s;box-shadow:0 8px 30px rgba(245,166,35,.2);margin-bottom:13px;position:relative;overflow:hidden}
+.cvtbtn::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:rgba(255,255,255,.16);transform:skewX(-20deg);transition:left .5s}
+.cvtbtn:hover::after{left:140%}
+.cvtbtn:hover{box-shadow:0 12px 40px rgba(245,166,35,.38);transform:translateY(-2px)}
+.cvtbtn:disabled{opacity:.38;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* PROGRESS */
+.progcard{display:none}.progcard.on{display:block}
+.slist{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
+.step{display:flex;align-items:center;gap:11px;padding:10px 14px;border-radius:9px;border:1px solid var(--border);background:var(--surf);font-size:.83rem;font-weight:500;transition:all .3s}
+.step.active{border-color:rgba(245,166,35,.3);background:rgba(245,166,35,.04)}
+.step.done{border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.03)}
+.si{width:26px;height:26px;border-radius:50%;background:var(--border);display:grid;place-items:center;font-size:.65rem;font-family:'JetBrains Mono',monospace;flex-shrink:0;transition:all .3s}
+.step.active .si{background:rgba(245,166,35,.1);border:1px solid var(--gold);color:var(--gold)}
+.step.done .si{background:rgba(74,222,128,.1);border:1px solid var(--green);color:var(--green)}
 .st{flex:1;color:var(--muted)}.step.active .st,.step.done .st{color:var(--text)}
-.stm{font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--muted)}
-.prog-track{background:var(--border);border-radius:100px;height:5px;overflow:hidden;margin-bottom:6px}
-.prog-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--amber),var(--gold),var(--gold2));width:0%;transition:width 0.4s ease;box-shadow:0 0 10px rgba(245,166,35,0.4)}
-.prog-pct{font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);text-align:right}
-/* Chunk progress indicator */
-.chunk-progress{display:none;margin-top:14px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
-.chunk-progress.show{display:block}
-.cp-label{font-size:0.75rem;font-family:'JetBrains Mono',monospace;color:var(--muted);margin-bottom:8px}
-.cp-bar-wrap{background:var(--border);border-radius:100px;height:4px;overflow:hidden}
-.cp-bar{height:100%;background:var(--green);width:0%;border-radius:100px;transition:width 0.5s}
-/* Results */
-.results-section{display:none}
-.results-section.show{display:block}
-.results-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:16px 20px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.2);border-radius:14px}
-.res-badge{background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);color:var(--green);padding:5px 14px;border-radius:100px;font-size:0.72rem;font-family:'JetBrains Mono',monospace;font-weight:600}
-.res-title{font-weight:700;font-size:1rem;color:var(--cream)}
-.res-meta{font-size:0.8rem;color:var(--muted);font-family:'JetBrains Mono',monospace}
-/* Chunk card */
-.chunk-card{background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:14px;overflow:hidden}
-.chunk-header{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface)}
-.chunk-num{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--amber),var(--gold));display:grid;place-items:center;font-weight:800;color:var(--ink);font-size:0.85rem;flex-shrink:0}
-.chunk-title{font-weight:700;font-size:0.95rem;color:var(--cream)}
-.chunk-time{font-size:0.75rem;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
-.chunk-body{padding:18px 20px}
-/* Mini player */
-.mini-player{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:12px}
-.mp-btn{width:36px;height:36px;border-radius:50%;background:var(--gold);border:none;color:var(--ink);cursor:pointer;display:grid;place-items:center;font-size:14px;flex-shrink:0;transition:transform 0.2s}
-.mp-btn:hover{transform:scale(1.1)}
-.mp-bar{flex:1;height:3px;background:var(--border);border-radius:3px;position:relative;cursor:pointer;overflow:hidden}
-.mp-fill{position:absolute;inset-y:0;left:0;background:var(--gold);width:0%;border-radius:3px}
-.mp-time{font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--muted);white-space:nowrap}
-/* Download row */
-.dl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-.dl-btn{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:9px;cursor:pointer;font-family:'Outfit',sans-serif;font-size:0.78rem;font-weight:600;text-decoration:none;transition:all 0.2s;white-space:nowrap}
-.dl-btn:hover{border-color:var(--gold);color:var(--gold);background:rgba(245,166,35,0.05)}
-.dl-btn.midi{border-color:rgba(168,85,247,0.3);color:#c084fc}
-.dl-btn.midi:hover{border-color:#a855f7;background:rgba(168,85,247,0.06)}
-.dl-btn.audio{border-color:rgba(245,166,35,0.3);color:var(--gold)}
-.dl-btn.audio:hover{border-color:var(--gold);background:rgba(245,166,35,0.06)}
-.dl-btn.txt{border-color:rgba(74,222,128,0.3);color:var(--green)}
-.dl-btn.txt:hover{border-color:var(--green);background:rgba(74,222,128,0.06)}
-/* Transcript */
-.chunk-transcript{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.ct-head{padding:8px 14px;border-bottom:1px solid var(--border);font-size:0.72rem;font-family:'JetBrains Mono',monospace;color:var(--muted);display:flex;justify-content:space-between}
-.ct-body{padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;line-height:1.9;color:var(--muted);max-height:150px;overflow-y:auto}
-.ct-body::-webkit-scrollbar{width:3px}
-.ct-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-.cnote{display:flex;gap:16px}
-.cn-pitch{color:var(--gold);min-width:30px}
-.cn-vel{color:#a78bfa}
-.cn-t{color:var(--green)}
-/* Toast */
-.toast{position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 18px;font-size:0.85rem;font-weight:500;display:flex;align-items:center;gap:10px;transform:translateY(80px);opacity:0;transition:all 0.3s;max-width:320px;box-shadow:0 20px 60px rgba(0,0,0,0.4)}
-.toast.show{transform:translateY(0);opacity:1}
-.toast.ok{border-color:rgba(74,222,128,0.3)}.toast.err{border-color:rgba(248,113,113,0.3)}.toast.warn{border-color:rgba(245,158,11,0.3)}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:768px){nav{padding:14px 20px}.hero{padding:50px 20px 40px}.main-card{padding:0 14px 60px}.settings-row{grid-template-columns:1fr}.dl-row{grid-template-columns:1fr}}
+.stm{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--muted)}
+.pt{background:var(--border);border-radius:100px;height:4px;overflow:hidden;margin-bottom:5px}
+.pf{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--amb),var(--gold),var(--g2));width:0%;transition:width .4s ease;box-shadow:0 0 10px rgba(245,166,35,.4)}
+.pp{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);text-align:right}
+
+/* RESULTS */
+.res{display:none}.res.on{display:block}
+.reshdr{display:flex;align-items:center;gap:12px;padding:14px 18px;background:rgba(74,222,128,.04);border:1px solid rgba(74,222,128,.15);border-radius:13px;margin-bottom:14px}
+.rbadge{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.22);color:var(--green);padding:4px 12px;border-radius:100px;font-size:.68rem;font-family:'JetBrains Mono',monospace;font-weight:600;white-space:nowrap}
+.rtitle{font-weight:700;font-size:.92rem;color:var(--cream)}
+.rmeta{font-size:.72rem;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+
+/* SECTION CARD */
+.sc{background:var(--card);border:1px solid var(--border);border-radius:15px;margin-bottom:12px;overflow:hidden}
+.schdr{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--border);background:var(--surf)}
+.scnum{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--amb),var(--gold));display:grid;place-items:center;font-weight:800;color:var(--ink);font-size:.8rem;flex-shrink:0}
+.scttl{font-weight:700;font-size:.9rem;color:var(--cream)}
+.sct{font-size:.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.scbody{padding:15px 18px}
+
+/* MINI PLAYER */
+.mp{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surf);border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
+.mpb{width:32px;height:32px;border-radius:50%;background:var(--gold);border:none;color:var(--ink);cursor:pointer;display:grid;place-items:center;font-size:12px;flex-shrink:0;transition:transform .2s}
+.mpb:hover{transform:scale(1.08)}
+.mpbar{flex:1;height:3px;background:var(--border);border-radius:3px;position:relative;cursor:pointer;overflow:hidden}
+.mpf{position:absolute;inset-y:0;left:0;background:linear-gradient(90deg,var(--amb),var(--gold));width:0%;border-radius:3px}
+.mpt{font-family:'JetBrains Mono',monospace;font-size:.66rem;color:var(--muted);white-space:nowrap}
+
+/* DOWNLOAD ROW */
+.dlrow{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}
+.dlbtn{display:flex;align-items:center;justify-content:center;gap:5px;padding:9px 5px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-size:.76rem;font-weight:700;text-decoration:none;transition:all .2s;border:1.5px solid;text-align:center}
+.dlbtn.midi{border-color:rgba(192,132,252,.3);color:var(--purple);background:rgba(192,132,252,.04)}.dlbtn.midi:hover{border-color:var(--purple);background:rgba(192,132,252,.09)}
+.dlbtn.wav{border-color:rgba(245,166,35,.3);color:var(--gold);background:rgba(245,166,35,.04)}.dlbtn.wav:hover{border-color:var(--gold);background:rgba(245,166,35,.09)}
+.dlbtn.txt{border-color:rgba(74,222,128,.3);color:var(--green);background:rgba(74,222,128,.04)}.dlbtn.txt:hover{border-color:var(--green);background:rgba(74,222,128,.09)}
+
+/* TRANSCRIPT */
+.trbox{background:var(--surf);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.trhdr{padding:7px 13px;border-bottom:1px solid var(--border);font-size:.68rem;font-family:'JetBrains Mono',monospace;color:var(--muted);display:flex;justify-content:space-between}
+.trbody{padding:9px 13px;font-family:'JetBrains Mono',monospace;font-size:.72rem;line-height:1.85;color:var(--muted);max-height:130px;overflow-y:auto}
+.trbody::-webkit-scrollbar{width:3px}.trbody::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.tnote{display:flex;gap:14px}.tp{color:var(--gold);min-width:26px}.tv{color:var(--purple)}.tt{color:var(--green)}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:11px 16px;font-size:.83rem;font-weight:500;display:flex;align-items:center;gap:9px;transform:translateY(80px);opacity:0;transition:all .3s;max-width:290px;box-shadow:0 16px 50px rgba(0,0,0,.4)}
+.toast.on{transform:translateY(0);opacity:1}
+.toast.ok{border-color:rgba(74,222,128,.28)}.toast.err{border-color:rgba(248,113,113,.28)}.toast.warn{border-color:rgba(245,158,11,.28)}
+
+@keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+@media(max-width:768px){nav{padding:13px 18px}.hero{padding:44px 18px 32px}.wrap{padding:0 12px 60px}.srow{grid-template-columns:1fr}.dlrow{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="bg-canvas"></div>
-<canvas id="bgWave"></canvas>
+<div class="bg"></div>
+<canvas id="bgc"></canvas>
 <div class="page">
 
 <nav>
-  <div class="logo">
-    <div class="logo-mark">🎵</div>
-    <div class="logo-name">Sound<span>ToScore</span></div>
-  </div>
-  <div class="nav-badge">Brass Band AI Converter</div>
+  <div class="logo"><div class="lm">🎵</div><div class="ln">Sound<span>ToScore</span></div></div>
+  <div class="ntag">Brass Band Converter</div>
 </nav>
 
 <section class="hero">
-  <div class="hero-tag"><span class="pulse"></span> Chunk-based processing -- any file size supported</div>
-  <h1>Your audio,<br><em>note by note</em></h1>
-  <p class="hero-sub">Upload any MP3. The browser compresses it, our AI extracts every note per 20-second chunk, and renders it through any brass band or percussion instrument.</p>
-  <div class="feature-pills">
-    <span class="pill hi">Any file size</span>
-    <span class="pill hi">29 instruments</span>
-    <span class="pill">Browser compression</span>
-    <span class="pill">Chunk-by-chunk display</span>
-    <span class="pill">MIDI + WAV + Transcript</span>
-    <span class="pill hi">512MB safe</span>
-  </div>
+  <div class="htag"><span class="dot"></span>MP3 to MIDI for Brass Band and Percussion</div>
+  <h1>Transform audio into<br><em>sheet-ready MIDI</em></h1>
+  <p class="hp">Upload your recording. Choose a brass band or percussion instrument. Download the MIDI file, rendered audio, and full note transcript.</p>
 </section>
 
-<div class="main-card">
+<div class="wrap">
 
-  <!-- UPLOAD -->
-  <div class="card">
-    <div class="card-lbl">01 -- Upload Audio</div>
-    <div class="drop" id="dropZone" onclick="document.getElementById('fileInput').click()">
-      <span class="drop-icon">🎧</span>
-      <div class="drop-title">Drop your MP3 here</div>
-      <div class="drop-sub">or click to browse -- <strong>MP3, WAV, M4A</strong> -- any size</div>
-    </div>
-    <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.m4a">
-    <div class="file-info" id="fileInfo">
-      <div class="fi-icon">🎵</div>
-      <div class="fi-details">
-        <div class="fi-name" id="fileName">--</div>
-        <div class="fi-meta" id="fileMeta">--</div>
-      </div>
-      <button class="fi-rm" onclick="removeFile()">Remove</button>
-    </div>
-    <div class="warn-box" id="warnBox">
-      <span>!</span> <span id="warnText">Low-quality audio detected. Accuracy may be reduced.</span>
-    </div>
-    <div class="compress-bar-wrap" id="compressWrap">
-      <div class="compress-label" id="compressLabel">Compressing audio in browser...</div>
-      <div class="compress-track"><div class="compress-fill" id="compressFill"></div></div>
-    </div>
+<!-- 01 UPLOAD -->
+<div class="card">
+  <div class="clbl">01 &mdash; Upload Audio</div>
+  <div class="dz" id="dz" onclick="document.getElementById('fi').click()">
+    <span class="dico">🎧</span>
+    <div class="dt">Drop your audio file here</div>
+    <div class="ds">Click to browse &mdash; <b>MP3, WAV, M4A</b> &mdash; any file size</div>
   </div>
-
-  <!-- INSTRUMENT -->
-  <div class="card">
-    <div class="card-lbl">02 -- Choose Instrument</div>
-    <div class="instr-grid" id="instrGrid"></div>
+  <input type="file" id="fi" accept="audio/*,.mp3,.wav,.m4a">
+  <div class="fpill" id="fpill">
+    <span style="font-size:20px">🎵</span>
+    <div style="flex:1;min-width:0">
+      <div class="fpn" id="fname"></div>
+      <div class="fpm" id="fmeta"></div>
+    </div>
+    <button class="fprm" onclick="rmFile()">Remove</button>
   </div>
+  <div class="wbox" id="wbox"><span>!</span><span id="wtxt">Low-quality audio — accuracy may vary.</span></div>
+</div>
 
-  <!-- SETTINGS -->
-  <div class="card">
-    <div class="card-lbl">03 -- Settings</div>
-    <div class="settings-row">
-      <div class="sg">
-        <label>Tempo -- BPM</label>
-        <div class="range-row">
-          <input type="range" id="tempoR" min="60" max="200" value="120" oninput="document.getElementById('tempoV').textContent=this.value">
-          <span class="rv" id="tempoV">120</span>
+<!-- 02 INSTRUMENT -->
+<div class="card">
+  <div class="clbl">02 &mdash; Choose Instrument</div>
+  <div id="instrPanel"></div>
+</div>
+
+<!-- 03 SETTINGS -->
+<div class="card">
+  <div class="clbl">03 &mdash; Settings</div>
+  <div class="srow">
+
+    <!-- Tempo with ring -->
+    <div class="sg">
+      <label>
+        Tempo
+        <div class="lbl-info">i
+          <div class="tip">
+            <b>Tempo (BPM)</b><br>
+            Sets the speed of the MIDI output.<br>
+            60 = slow / ballad<br>
+            90 = march / walking pace<br>
+            120 = standard / moderate<br>
+            160 = fast / allegro<br>
+            200 = very fast / presto<br>
+            Brass band marches: 110&ndash;130 BPM
+          </div>
+        </div>
+      </label>
+      <div class="tempo-wrap">
+        <div class="tempo-ring-wrap">
+          <svg viewBox="0 0 64 64"><circle class="ring-bg" cx="32" cy="32" r="26"/><circle class="ring-fill" id="rring" cx="32" cy="32" r="26"/></svg>
+          <div class="tempo-val"><span class="tv-num" id="tvnum">120</span><span class="tv-lbl">bpm</span></div>
+        </div>
+        <div class="tempo-ctrl">
+          <input type="range" id="tempoR" min="60" max="200" value="120" oninput="updateTempo(this.value)">
+          <div class="tempo-marks"><span>60</span><span>120</span><span>200</span></div>
+          <div class="tempo-presets">
+            <button class="tpreset" onclick="setTempo(72)">Adagio</button>
+            <button class="tpreset" onclick="setTempo(96)">Andante</button>
+            <button class="tpreset" onclick="setTempo(120)">Moderato</button>
+            <button class="tpreset" onclick="setTempo(152)">Allegro</button>
+          </div>
         </div>
       </div>
-      <div class="sg">
-        <label>Output Format</label>
-        <select id="fmtSel"><option value="wav">WAV (lossless)</option><option value="mp3">MP3</option></select>
-      </div>
+    </div>
+
+    <!-- Format -->
+    <div class="sg">
+      <label>
+        Output Format
+        <div class="lbl-info">i
+          <div class="tip">
+            <b>WAV</b> &mdash; Lossless, best quality.<br>Recommended for music work.<br><br>
+            <b>MP3</b> &mdash; Compressed, smaller file.<br>Good for sharing/streaming.
+          </div>
+        </div>
+      </label>
+      <select id="fmtSel">
+        <option value="wav">WAV &mdash; Lossless</option>
+        <option value="mp3">MP3 &mdash; Compressed</option>
+      </select>
     </div>
   </div>
+</div>
 
-  <!-- CONVERT -->
-  <button class="cvt-btn" id="cvtBtn" onclick="startConvert()" disabled>Convert to MIDI</button>
+<!-- CONVERT -->
+<button class="cvtbtn" id="cvtBtn" onclick="doConvert()" disabled>&#9889;&nbsp; Convert to MIDI</button>
 
-  <!-- PROGRESS -->
-  <div class="card prog-card" id="progCard">
-    <div class="card-lbl">Processing</div>
-    <div class="step-list">
-      <div class="step" id="ps1"><div class="si" id="pi1">01</div><div class="st">Compressing audio in browser</div><div class="stm" id="pt1">--</div></div>
-      <div class="step" id="ps2"><div class="si" id="pi2">02</div><div class="st">Uploading to server</div><div class="stm" id="pt2">--</div></div>
-      <div class="step" id="ps3"><div class="si" id="pi3">03</div><div class="st">Converting audio chunks to MIDI</div><div class="stm" id="pt3">--</div></div>
-      <div class="step" id="ps4"><div class="si" id="pi4">04</div><div class="st">Rendering instrument audio</div><div class="stm" id="pt4">--</div></div>
-    </div>
-    <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
-    <div class="prog-pct" id="progPct">0%</div>
-    <div class="chunk-progress" id="chunkProg">
-      <div class="cp-label" id="cpLabel">Processing chunk 0 of 0...</div>
-      <div class="cp-bar-wrap"><div class="cp-bar" id="cpBar"></div></div>
+<!-- PROGRESS -->
+<div class="card progcard" id="progCard">
+  <div class="clbl">Processing</div>
+  <div class="slist">
+    <div class="step" id="s1"><div class="si" id="i1">01</div><div class="st">Uploading to server</div><div class="stm" id="t1">--</div></div>
+    <div class="step" id="s2"><div class="si" id="i2">02</div><div class="st">Converting audio format</div><div class="stm" id="t2">--</div></div>
+    <div class="step" id="s3"><div class="si" id="i3">03</div><div class="st">Extracting notes and generating MIDI</div><div class="stm" id="t3">--</div></div>
+    <div class="step" id="s4"><div class="si" id="i4">04</div><div class="st">Rendering instrument audio</div><div class="stm" id="t4">--</div></div>
+  </div>
+  <div class="pt"><div class="pf" id="pfill"></div></div>
+  <div class="pp" id="ppct">0%</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res" id="res">
+  <div class="reshdr">
+    <div class="rbadge">&#10003; Complete</div>
+    <div class="res-info">
+      <div class="rtitle" id="rtitle">Conversion complete</div>
+      <div class="rmeta" id="rmeta">Ready to download</div>
     </div>
   </div>
+  <div id="chunks"></div>
+</div>
 
-  <!-- RESULTS -->
-  <div class="results-section" id="resultsSection">
-    <div class="results-header">
-      <div class="res-badge">Conversion Complete</div>
-      <div>
-        <div class="res-title" id="resTitle">Conversion done!</div>
-        <div class="res-meta" id="resMeta">0 chunks processed</div>
-      </div>
-    </div>
-    <div id="chunksContainer"></div>
-  </div>
-
-</div><!-- .main-card -->
+</div><!-- .wrap -->
 </div><!-- .page -->
 <div class="toast" id="toast"></div>
 
 <script>
-// BG waves
+// BG canvas
 (function(){
-  const c=document.getElementById('bgWave'),ctx=c.getContext('2d');let t=0;
-  function resize(){c.width=window.innerWidth;c.height=window.innerHeight}
-  resize();window.addEventListener('resize',resize);
-  function draw(){
-    ctx.clearRect(0,0,c.width,c.height);
-    for(let layer=0;layer<3;layer++){
-      ctx.beginPath();ctx.globalAlpha=0.05-layer*0.012;ctx.strokeStyle='#f5a623';ctx.lineWidth=1;
-      const A=35-layer*8,freq=0.003+layer*0.001,spd=0.35+layer*0.15;
-      for(let x=0;x<=c.width;x+=4){
-        const y=c.height*(0.3+layer*0.18)+Math.sin(x*freq+t*spd+layer)*A;
-        x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-      }
-      ctx.stroke();
-    }
-    t+=0.04;requestAnimationFrame(draw);
-  }
-  draw();
+  const c=document.getElementById('bgc'),ctx=c.getContext('2d');let t=0;
+  function rs(){c.width=window.innerWidth;c.height=window.innerHeight}rs();window.addEventListener('resize',rs);
+  function draw(){ctx.clearRect(0,0,c.width,c.height);for(let l=0;l<3;l++){ctx.beginPath();ctx.globalAlpha=.04-l*.01;ctx.strokeStyle='#f5a623';ctx.lineWidth=1;const A=28-l*6,f=.003+l*.001,s=.3+l*.11;for(let x=0;x<=c.width;x+=4){const y=c.height*(.3+l*.18)+Math.sin(x*f+t*s+l)*A;x===0?ctx.moveTo(x,y):ctx.lineTo(x,y)}ctx.stroke()}t+=.04;requestAnimationFrame(draw)}draw();
 })();
 
-// Instruments
-const INSTR=[
-  {id:'trumpet',e:'🎺',n:'Trumpet',sub:'Bb',cat:'brass'},
-  {id:'flute',e:'🪈',n:'Flute',sub:'',cat:'brass'},
-  {id:'soprano_cornet',e:'🎺',n:'Soprano Cornet',sub:'Eb',cat:'brass'},
-  {id:'solo_cornet',e:'🎺',n:'Solo Cornet',sub:'Bb',cat:'brass'},
-  {id:'repiano_cornet',e:'🎺',n:'Repiano Cornet',sub:'Bb',cat:'brass'},
-  {id:'cornet_2nd',e:'🎺',n:'2nd Cornet',sub:'Bb',cat:'brass'},
-  {id:'cornet_3rd',e:'🎺',n:'3rd Cornet',sub:'Bb',cat:'brass'},
-  {id:'flugelhorn',e:'🎺',n:'Flugelhorn',sub:'Bb',cat:'brass'},
-  {id:'solo_tenor_horn',e:'📯',n:'Solo Tenor Horn',sub:'Eb',cat:'brass'},
-  {id:'tenor_horn_1st',e:'📯',n:'1st Tenor Horn',sub:'Eb',cat:'brass'},
-  {id:'tenor_horn_2nd',e:'📯',n:'2nd Tenor Horn',sub:'Eb',cat:'brass'},
-  {id:'baritone_1st',e:'🎷',n:'1st Baritone',sub:'Bb',cat:'brass'},
-  {id:'baritone_2nd',e:'🎷',n:'2nd Baritone',sub:'Bb',cat:'brass'},
-  {id:'trombone_1st',e:'🎺',n:'1st Trombone',sub:'Bb',cat:'brass'},
-  {id:'trombone_2nd',e:'🎺',n:'2nd Trombone',sub:'Bb',cat:'brass'},
-  {id:'bass_trombone',e:'🎺',n:'Bass Trombone',sub:'',cat:'brass'},
-  {id:'euphonium',e:'🎷',n:'Euphonium',sub:'Bb',cat:'brass'},
-  {id:'eb_bass',e:'🎵',n:'Eb Bass',sub:'Tuba',cat:'brass'},
-  {id:'bbb_bass',e:'🎵',n:'BBb Bass',sub:'Tuba',cat:'brass'},
-  {id:'timpani',e:'🥁',n:'Timpani',sub:'',cat:'perc'},
-  {id:'drum_kit',e:'🥁',n:'Drum Kit',sub:'',cat:'perc'},
-  {id:'glockenspiel',e:'🎹',n:'Glockenspiel',sub:'',cat:'perc'},
-  {id:'xylophone',e:'🪘',n:'Xylophone',sub:'',cat:'perc'},
-  {id:'tubular_bells',e:'🔔',n:'Tubular Bells',sub:'',cat:'perc'},
-  {id:'snare_drum',e:'🥁',n:'Snare Drum',sub:'',cat:'perc'},
-  {id:'bass_drum',e:'🥁',n:'Bass Drum',sub:'',cat:'perc'},
-  {id:'cymbals',e:'💫',n:'Cymbals',sub:'',cat:'perc'},
-  {id:'triangle',e:'🔺',n:'Triangle',sub:'',cat:'perc'},
-  {id:'tambourine',e:'🪘',n:'Tambourine',sub:'',cat:'perc'},
+// Tempo ring
+function updateTempo(v){
+  v=parseInt(v);
+  document.getElementById('tvnum').textContent=v;
+  const pct=(v-60)/(200-60);
+  const circ=163;
+  document.getElementById('rring').style.strokeDashoffset=circ-(pct*circ);
+}
+function setTempo(v){
+  document.getElementById('tempoR').value=v;
+  updateTempo(v);
+}
+updateTempo(120);
+
+// Instruments with groups and info
+const INSTR_GROUPS=[
+  {
+    cat:'brass',label:'Brass',
+    groups:[
+      {title:'Cornets',items:[
+        {id:'soprano_cornet',e:'🎺',n:'Soprano Cornet',sub:'Eb',info:'Highest cornet. Plays Eb. Brilliant tone used for top melody.'},
+        {id:'solo_cornet',e:'🎺',n:'Solo Cornet',sub:'Bb',info:'Principal melody instrument of a brass band. Plays Bb.'},
+        {id:'repiano_cornet',e:'🎺',n:'Repiano Cornet',sub:'Bb',info:'Supports the solo cornet. Plays Bb. Bridge between solo and tutti.'},
+        {id:'cornet_2nd',e:'🎺',n:'2nd Cornet',sub:'Bb',info:'Harmony support for solo cornet. Plays Bb.'},
+        {id:'cornet_3rd',e:'🎺',n:'3rd Cornet',sub:'Bb',info:'Inner harmony and bass support. Plays Bb.'},
+      ]},
+      {title:'Flugel & Horns',items:[
+        {id:'flugelhorn',e:'🎺',n:'Flugelhorn',sub:'Bb',info:'Warm, mellow tone. Plays Bb. Contrasts with cornet brightness.'},
+        {id:'solo_tenor_horn',e:'📯',n:'Solo Tenor Horn',sub:'Eb',info:'Principal tenor horn. Rich mid-range tone. Plays Eb.'},
+        {id:'tenor_horn_1st',e:'📯',n:'1st Tenor Horn',sub:'Eb',info:'1st harmony tenor horn part. Plays Eb.'},
+        {id:'tenor_horn_2nd',e:'📯',n:'2nd Tenor Horn',sub:'Eb',info:'2nd harmony tenor horn part. Plays Eb.'},
+      ]},
+      {title:'Baritones & Euphonium',items:[
+        {id:'baritone_1st',e:'🎷',n:'1st Baritone',sub:'Bb',info:'Upper baritone part. Warm, round tone. Plays Bb.'},
+        {id:'baritone_2nd',e:'🎷',n:'2nd Baritone',sub:'Bb',info:'Lower baritone harmony. Plays Bb.'},
+        {id:'euphonium',e:'🎷',n:'Euphonium',sub:'Bb',info:'Expressive solo bass voice of the band. Plays Bb. Often soloistic.'},
+      ]},
+      {title:'Trombones',items:[
+        {id:'trombone_1st',e:'🎺',n:'1st Trombone',sub:'Bb',info:'Lead trombone. Full, powerful tone. Plays Bb.'},
+        {id:'trombone_2nd',e:'🎺',n:'2nd Trombone',sub:'Bb',info:'Harmony trombone. Plays Bb.'},
+        {id:'bass_trombone',e:'🎺',n:'Bass Trombone',sub:'',info:'Deepest trombone. Anchors the harmony with a dark, weighty tone.'},
+      ]},
+      {title:'Basses & Others',items:[
+        {id:'trumpet',e:'🎺',n:'Trumpet',sub:'Bb',info:'Bright, penetrating tone. Plays Bb. Similar range to cornet.'},
+        {id:'flute',e:'🪈',n:'Flute',sub:'',info:'Woodwind instrument. Light, airy tone. C concert pitch.'},
+        {id:'eb_bass',e:'🎵',n:'Eb Bass (Tuba)',sub:'Eb',info:'Upper bass tuba. Plays Eb. Powerful low-end foundation.'},
+        {id:'bbb_bass',e:'🎵',n:'BBb Bass (Tuba)',sub:'BBb',info:'Deepest tuba. Plays BBb. Bottom of the band harmonic structure.'},
+      ]},
+    ]
+  },
+  {
+    cat:'perc',label:'Percussion',
+    groups:[
+      {title:'Pitched Percussion',items:[
+        {id:'timpani',e:'🥁',n:'Timpani',sub:'',info:'Tunable kettle drums. Pitched. Adds drama and rhythmic pulse.'},
+        {id:'glockenspiel',e:'🎹',n:'Glockenspiel',sub:'',info:'Bright metallic bars. Adds sparkle to upper register melodies.'},
+        {id:'xylophone',e:'🪘',n:'Xylophone',sub:'',info:'Wooden bars. Dry, crisp articulation. Strong rhythmic presence.'},
+        {id:'tubular_bells',e:'🔔',n:'Tubular Bells',sub:'',info:'Long metal tubes. Church-bell tone. Ceremonial and atmospheric.'},
+      ]},
+      {title:'Unpitched Percussion',items:[
+        {id:'drum_kit',e:'🥁',n:'Drum Kit',sub:'',info:'Full rhythmic kit. Provides drive, groove and rhythmic foundation.'},
+        {id:'snare_drum',e:'🥁',n:'Snare Drum',sub:'',info:'Sharp, military attack. Essential for marches and rhythmic figures.'},
+        {id:'bass_drum',e:'🥁',n:'Bass Drum',sub:'',info:'Deep, resonant boom. Marks beat 1 in marches and fanfares.'},
+        {id:'cymbals',e:'💫',n:'Cymbals',sub:'',info:'Crash or suspended. Adds accent, shimmer and climactic colour.'},
+        {id:'triangle',e:'🔺',n:'Triangle',sub:'',info:'Light, ringing tone. Used for delicate textural effects.'},
+        {id:'tambourine',e:'🪘',n:'Tambourine',sub:'',info:'Hand-held drum with jingles. Adds rhythmic colour and texture.'},
+      ]},
+    ]
+  }
 ];
 
-let selInstr='solo_cornet', selFile=null, compressedBlob=null;
-const audioPool={};
+let selInstr='solo_cornet', selFile=null;
 
-const grid=document.getElementById('instrGrid');
-['brass','perc'].forEach(cat=>{
-  const catItems=INSTR.filter(i=>i.cat===cat);
-  const hdr=document.createElement('div');
-  hdr.className='instr-cat';
-  hdr.textContent=cat==='brass'?'Brass':'Percussion';
-  grid.appendChild(hdr);
-  catItems.forEach(i=>{
-    const b=document.createElement('button');
-    b.className='ib'+(i.id===selInstr?' on':'');b.id='ib-'+i.id;
-    b.innerHTML='<span class="ib-em">'+i.e+'</span><span class="ib-nm">'+i.n+'</span>'+(i.sub?'<span class="ib-key">'+i.sub+'</span>':'');
-    b.onclick=()=>{selInstr=i.id;INSTR.forEach(x=>{const el=document.getElementById('ib-'+x.id);if(el)el.classList.remove('on')});b.classList.add('on')};
-    grid.appendChild(b);
+const panel=document.getElementById('instrPanel');
+INSTR_GROUPS.forEach(catGroup=>{
+  const catDiv=document.createElement('div');
+  catDiv.style.cssText='margin-bottom:18px';
+  const catTitle=document.createElement('div');
+  catTitle.style.cssText='font-family:"JetBrains Mono",monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);padding:4px 2px 8px;border-bottom:1px solid var(--border);margin-bottom:10px;font-weight:600';
+  catTitle.textContent=catGroup.label;
+  catDiv.appendChild(catTitle);
+
+  catGroup.groups.forEach(grp=>{
+    const grpDiv=document.createElement('div');
+    grpDiv.className='ig-group';
+    const grpTitle=document.createElement('div');
+    grpTitle.className='ig-group-title';
+    grpTitle.innerHTML='<span>'+grp.title+'</span>';
+    grpDiv.appendChild(grpTitle);
+    const grid=document.createElement('div');
+    grid.className='ig-grid';
+    grp.items.forEach(i=>{
+      const b=document.createElement('button');
+      b.className='ib'+(i.id===selInstr?' on':'');
+      b.id='ib-'+i.id;
+      b.innerHTML=
+        '<div class="iinfo-wrap"><div class="iinfo" tabindex="0">i<div class="tooltip">'+
+          '<b>'+i.n+'</b><br>'+(i.info||'')+'</div></div></div>'+
+        '<span class="iem">'+i.e+'</span>'+
+        '<span class="inm">'+i.n+'</span>'+
+        (i.sub?'<span class="ikey">'+i.sub+'</span>':'');
+      b.onclick=()=>{
+        selInstr=i.id;
+        document.querySelectorAll('.ib').forEach(x=>x.classList.remove('on'));
+        b.classList.add('on');
+      };
+      grid.appendChild(b);
+    });
+    grpDiv.appendChild(grid);
+    catDiv.appendChild(grpDiv);
   });
+  panel.appendChild(catDiv);
 });
 
 // File handling
-const dz=document.getElementById('dropZone');
+const dz=document.getElementById('dz');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
 dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
-dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0])});
-document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0])});
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0])});
+document.getElementById('fi').addEventListener('change',e=>{if(e.target.files[0])setFile(e.target.files[0])});
 
-function handleFile(f){
+function setFile(f){
   if(!f.type.startsWith('audio/')&&!/\.(mp3|wav|m4a)$/i.test(f.name)){showToast('Please upload MP3, WAV or M4A','err');return}
   selFile=f;
-  compressedBlob=null;
-  document.getElementById('fileName').textContent=f.name;
-  document.getElementById('fileMeta').textContent=fmtB(f.size)+' -- '+f.type;
-  document.getElementById('fileInfo').classList.add('show');
+  document.getElementById('fname').textContent=f.name;
+  document.getElementById('fmeta').textContent=fmtB(f.size)+' &mdash; '+f.type;
+  document.getElementById('fpill').classList.add('on');
   document.getElementById('cvtBtn').disabled=false;
-  document.getElementById('resultsSection').classList.remove('show');
-  document.getElementById('progCard').classList.remove('show');
-  document.getElementById('warnBox').classList.remove('show');
-  // Check quality
-  const kbps=f.size*8/1024;
-  if(f.size<300*1024){
-    document.getElementById('warnText').textContent='Low-quality audio detected. MIDI accuracy may be reduced.';
-    document.getElementById('warnBox').classList.add('show');
-  }
+  document.getElementById('res').classList.remove('on');
+  document.getElementById('progCard').classList.remove('on');
+  document.getElementById('wbox').classList.remove('on');
+  if(f.size<300*1024)document.getElementById('wbox').classList.add('on');
   showToast('Loaded: '+f.name,'ok');
 }
-
-function removeFile(){
-  selFile=null;compressedBlob=null;
-  document.getElementById('fileInput').value='';
-  document.getElementById('fileInfo').classList.remove('show');
-  document.getElementById('warnBox').classList.remove('show');
+function rmFile(){
+  selFile=null;document.getElementById('fi').value='';
+  document.getElementById('fpill').classList.remove('on');
+  document.getElementById('wbox').classList.remove('on');
   document.getElementById('cvtBtn').disabled=true;
 }
-
 function fmtB(b){return b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB'}
 
-// Simple browser-side "compression" via re-reading as lower quality
-// In a real deployment you'd use ffmpeg.wasm -- this sends file as-is but
-// the backend handles any size via chunking
-async function compressAudio(file){
-  // For now: just return the file directly
-  // The backend chunking handles memory safety
-  return file;
+// Progress helpers
+function setP(v){document.getElementById('pfill').style.width=Math.min(v,100)+'%';document.getElementById('ppct').textContent=Math.round(Math.min(v,100))+'%'}
+function markStep(n,state){
+  document.getElementById('s'+n).className='step '+(state||'');
+  document.getElementById('i'+n).textContent=state==='active'?'...':state==='done'?'OK':String(n).padStart(2,'0');
 }
+function stepTime(n,t){document.getElementById('t'+n).textContent=t}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function elapsed(t0){return((performance.now()-t0)/1000).toFixed(1)+'s'}
 
-// Backend URL
+// Convert
 const API='https://soundtoscore.onrender.com';
 
-// Step helpers
-const STEPS=[{id:'ps1',dur:2000},{id:'ps2',dur:3000},{id:'ps3',dur:15000},{id:'ps4',dur:5000}];
-const TOTAL_DUR=STEPS.reduce((a,b)=>a+b.dur,0);
-
-function setP(v){
-  document.getElementById('progFill').style.width=Math.min(v,100)+'%';
-  document.getElementById('progPct').textContent=Math.round(Math.min(v,100))+'%';
-}
-
-function markStep(n,state){
-  const el=document.getElementById('ps'+n);
-  const ind=document.getElementById('pi'+n);
-  el.className='step '+(state==='active'?'active':state==='done'?'done':'');
-  ind.textContent=state==='active'?'...':state==='done'?'OK':String(n).padStart(2,'0');
-}
-
-function markStepTime(n,t){
-  document.getElementById('pt'+n).textContent=t;
-}
-
-function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-
-async function startConvert(){
+async function doConvert(){
   if(!selFile){showToast('Please select a file first','err');return}
-
   const btn=document.getElementById('cvtBtn');
   btn.disabled=true;btn.textContent='Processing...';
-  document.getElementById('progCard').classList.add('show');
-  document.getElementById('resultsSection').classList.remove('show');
-  document.getElementById('chunksContainer').innerHTML='';
-
-  // Reset steps
-  for(let i=1;i<=4;i++){markStep(i,'');markStepTime(i,'--')}
+  document.getElementById('progCard').classList.add('on');
+  document.getElementById('res').classList.remove('on');
+  document.getElementById('chunks').innerHTML='';
+  for(let i=1;i<=4;i++){markStep(i,'');stepTime(i,'--')}
   setP(0);
-  document.getElementById('chunkProg').classList.remove('show');
 
   const t0=performance.now();
-
   try{
-    // Step 1: Compress
-    markStep(1,'active');
-    setP(5);
-    const compressWrap=document.getElementById('compressWrap');
-    const compressFill=document.getElementById('compressFill');
-    compressWrap.classList.add('show');
-    document.getElementById('compressLabel').textContent='Preparing audio...';
-    for(let p=0;p<=100;p+=20){compressFill.style.width=p+'%';await sleep(80)}
-    const fileToSend=await compressAudio(selFile);
-    compressWrap.classList.remove('show');
-    markStep(1,'done');markStepTime(1,((performance.now()-t0)/1000).toFixed(1)+'s');
-    setP(15);
+    markStep(1,'active');setP(8);
+    const fd=new FormData();
+    fd.append('file',selFile,selFile.name);
+    fd.append('instrument',selInstr);
+    fd.append('tempo',document.getElementById('tempoR').value);
+    fd.append('output_fmt',document.getElementById('fmtSel').value);
+    markStep(1,'done');stepTime(1,elapsed(t0));setP(15);
 
-    // Step 2: Upload
-    markStep(2,'active');
-    setP(20);
-    const formData=new FormData();
-    formData.append('file',fileToSend,selFile.name);
-    formData.append('instrument',selInstr);
-    formData.append('tempo',document.getElementById('tempoR').value);
-    formData.append('output_fmt',document.getElementById('fmtSel').value);
-
-    markStep(2,'done');markStepTime(2,((performance.now()-t0)/1000).toFixed(1)+'s');
-    setP(30);
-
-    // Step 3 & 4: Server processing
+    markStep(2,'active');setP(20);
     markStep(3,'active');
-    document.getElementById('chunkProg').classList.add('show');
-    document.getElementById('cpLabel').textContent='Processing on server...';
 
-    // Animate progress while waiting
-    let animPct=30;
-    const animInterval=setInterval(()=>{
-      if(animPct<85){animPct+=0.3;setP(animPct)}
-    },200);
+    let pct=20;
+    const anim=setInterval(()=>{if(pct<82){pct+=.22;setP(pct)}},200);
 
-    const res=await fetch(API+'/api/convert',{method:'POST',body:formData});
-    clearInterval(animInterval);
+    const res=await fetch(API+'/api/convert',{method:'POST',body:fd});
+    clearInterval(anim);
 
     if(!res.ok){
       const e=await res.json().catch(()=>({detail:'Server error '+res.status}));
-      throw new Error(e.detail||'Error '+res.status);
+      throw new Error(e.detail||'Server error '+res.status);
     }
-
     const data=await res.json();
-    markStep(3,'done');markStepTime(3,((performance.now()-t0)/1000).toFixed(1)+'s');
+    markStep(2,'done');stepTime(2,elapsed(t0));
+    markStep(3,'done');stepTime(3,elapsed(t0));
     setP(90);
 
-    // Step 4: Render results
     markStep(4,'active');
-    if(data.quality_warning){
-      document.getElementById('warnText').textContent=data.quality_warning;
-      document.getElementById('warnBox').classList.add('show');
-    }
+    if(data.quality_warning){document.getElementById('wtxt').textContent=data.quality_warning;document.getElementById('wbox').classList.add('on')}
     renderResults(data);
-    markStep(4,'done');markStepTime(4,((performance.now()-t0)/1000).toFixed(1)+'s');
+    markStep(4,'done');stepTime(4,elapsed(t0));
     setP(100);
-
-    showToast('Done! '+data.total_chunks+' chunk(s) ready','ok');
+    showToast('Done! '+data.total_chunks+' section(s) ready','ok');
 
   }catch(err){
     showToast('Error: '+err.message,'err');
-    document.getElementById('progCard').classList.remove('show');
+    document.getElementById('progCard').classList.remove('on');
   }finally{
-    btn.disabled=false;btn.textContent='Convert Again';
+    btn.disabled=false;btn.textContent='&#9889; Convert Again';
   }
 }
 
 function renderResults(data){
-  const instr=INSTR.find(i=>i.id===selInstr)||INSTR[3];
+  const instr=INSTR_GROUPS.flatMap(g=>g.groups.flatMap(gg=>gg.items)).find(x=>x.id===selInstr)||{n:'Solo Cornet',e:'🎺'};
   const base=selFile.name.replace(/\.[^.]+$/,'');
+  document.getElementById('rtitle').textContent=base+' \u2014 '+instr.n;
+  document.getElementById('rmeta').textContent=data.total_chunks+' section(s) \u2014 '+data.duration+'s total \u2014 processed in '+data.elapsed+'s';
+  document.getElementById('res').classList.add('on');
 
-  document.getElementById('resTitle').textContent=base+' -- '+instr.n;
-  document.getElementById('resMeta').textContent=
-    data.total_chunks+' chunk(s) -- '+data.duration+'s total -- '+data.elapsed+'s processing time';
-
-  document.getElementById('resultsSection').classList.add('show');
-  const container=document.getElementById('chunksContainer');
-  container.innerHTML='';
+  const cont=document.getElementById('chunks');
+  cont.innerHTML='';
 
   data.chunks.forEach((chunk,idx)=>{
-    const audioId='audio-'+idx;
-    const fillId='fill-'+idx;
-    const timeId='time-'+idx;
-    const btnId='btn-'+idx;
-
-    const card=document.createElement('div');
-    card.className='chunk-card';
-
-    const transcriptLines=(chunk.transcript_preview||'').split('\n').filter(Boolean).slice(0,8).map(l=>{
+    const aid='a'+idx,fid='mpf'+idx,tid='mpt'+idx,bid='mpb'+idx;
+    const lines=(chunk.transcript_preview||'').split('\n').filter(Boolean).slice(0,10).map(l=>{
       const p=l.trim().split(/\s+/);
-      if(p.length>=2&&p[0].match(/^[A-G][#b]?[0-9]?/)){
-        return '<div class="cnote"><span class="cn-pitch">'+p[0]+'</span><span class="cn-vel">'+(p[1]||'')+'</span><span class="cn-t">'+(p[2]||'')+'</span></div>';
+      if(p.length>=2&&/^[A-G]/.test(p[0])){
+        return '<div class="tnote"><span class="tp">'+p[0]+'</span><span class="tv">'+(p[1]||'')+'</span><span class="tt">'+(p[2]||'')+'</span></div>';
       }
-      return '<div style="color:var(--muted);font-size:0.72rem">'+l+'</div>';
+      return '';
     }).join('');
 
+    const card=document.createElement('div');
+    card.className='sc';
     card.innerHTML=
-      '<div class="chunk-header">'+
-        '<div class="chunk-num">'+(idx+1)+'</div>'+
+      '<div class="schdr">'+
+        '<div class="scnum">'+(idx+1)+'</div>'+
         '<div>'+
-          '<div class="chunk-title">Chunk '+(idx+1)+'</div>'+
-          '<div class="chunk-time">'+chunk.start+'s -- '+chunk.end+'s</div>'+
+          '<div class="scttl">Section '+(idx+1)+' &mdash; '+instr.e+' '+instr.n+'</div>'+
+          '<div class="sct">'+chunk.start+'s &mdash; '+chunk.end+'s</div>'+
         '</div>'+
       '</div>'+
-      '<div class="chunk-body">'+
-        '<div class="mini-player">'+
-          '<button class="mp-btn" id="'+btnId+'" onclick="toggleAudio('+idx+')">&#9654;</button>'+
-          '<div class="mp-bar" onclick="seekAudio(event,'+idx+')"><div class="mp-fill" id="'+fillId+'"></div></div>'+
-          '<div class="mp-time" id="'+timeId+'">0:00 / 0:00</div>'+
-          '<audio id="'+audioId+'" src="'+API+chunk.audio+'" crossorigin="anonymous"'+
-            ' ontimeupdate="tickAudio('+idx+')"'+
-            ' onloadedmetadata="metaAudio('+idx+')"'+
-            ' onended="endAudio('+idx+')"></audio>'+
+      '<div class="scbody">'+
+        // Player
+        '<div class="mp">'+
+          '<button class="mpb" id="'+bid+'" onclick="playPause('+idx+')">&#9654;</button>'+
+          '<div class="mpbar" onclick="seekAud(event,'+idx+')"><div class="mpf" id="'+fid+'"></div></div>'+
+          '<div class="mpt" id="'+tid+'">0:00 / 0:00</div>'+
+          '<audio id="'+aid+'" src="'+API+chunk.audio+'" crossorigin="anonymous"'+
+            ' ontimeupdate="tick('+idx+')" onloadedmetadata="meta('+idx+')" onended="ended('+idx+')"></audio>'+
         '</div>'+
-        '<div class="dl-row">'+
-          '<a class="dl-btn midi" href="'+API+chunk.midi+'" download="chunk'+(idx+1)+'.mid" target="_blank">MIDI</a>'+
-          '<a class="dl-btn audio" href="'+API+chunk.audio+'" download="chunk'+(idx+1)+'.wav" target="_blank">WAV</a>'+
-          '<a class="dl-btn txt" href="'+API+chunk.transcript+'" download="chunk'+(idx+1)+'_notes.txt" target="_blank">Transcript</a>'+
+        // Downloads
+        '<div class="dlrow">'+
+          '<a class="dlbtn midi" href="'+API+chunk.midi+'" download="section'+(idx+1)+'.mid" target="_blank">&#9834; Download MIDI</a>'+
+          '<a class="dlbtn wav" href="'+API+chunk.audio+'" download="section'+(idx+1)+'.wav" target="_blank">&#128266; Download WAV</a>'+
+          '<a class="dlbtn txt" href="'+API+chunk.transcript+'" download="section'+(idx+1)+'_notes.txt" target="_blank">&#128196; Transcript</a>'+
         '</div>'+
-        '<div class="chunk-transcript">'+
-          '<div class="ct-head"><span>Note Transcript</span><span>pitch velocity time</span></div>'+
-          '<div class="ct-body">'+(transcriptLines||'<div style="color:var(--muted)">Download transcript for full notes.</div>')+'</div>'+
+        // Transcript
+        '<div class="trbox">'+
+          '<div class="trhdr"><span>&#9834; Note Transcript Preview</span><span>pitch &middot; velocity &middot; time</span></div>'+
+          '<div class="trbody">'+(lines||'<span style="color:var(--muted)">Click Download Transcript for the full note list.</span>')+'</div>'+
         '</div>'+
       '</div>';
-
-    container.appendChild(card);
+    cont.appendChild(card);
   });
 
-  document.getElementById('resultsSection').scrollIntoView({behavior:'smooth',block:'start'});
+  document.getElementById('res').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-// Per-chunk audio player
-function toggleAudio(idx){
-  const audio=document.getElementById('audio-'+idx);
-  const btn=document.getElementById('btn-'+idx);
-  if(audio.paused){
-    // Pause all others
-    INSTR.forEach((_,i)=>{
-      const a=document.getElementById('audio-'+i);
-      const b=document.getElementById('btn-'+i);
-      if(a&&b&&i!==idx){a.pause();b.innerHTML='&#9654;'}
-    });
-    audio.play();btn.innerHTML='&#9646;&#9646;';
-  }else{audio.pause();btn.innerHTML='&#9654;'}
+// Audio player functions
+function playPause(idx){
+  const a=document.getElementById('a'+idx),b=document.getElementById('mpb'+idx);
+  if(!a)return;
+  if(a.paused){
+    document.querySelectorAll('audio').forEach((au,i)=>{au.pause();const bb=document.getElementById('mpb'+i);if(bb)bb.innerHTML='&#9654;'});
+    a.play().catch(err=>showToast('Playback: '+err.message,'err'));
+    b.innerHTML='&#9646;&#9646;';
+  }else{a.pause();b.innerHTML='&#9654;'}
 }
-function tickAudio(idx){
-  const a=document.getElementById('audio-'+idx);
-  if(!a||!a.duration)return;
-  document.getElementById('fill-'+idx).style.width=((a.currentTime/a.duration)*100)+'%';
-  document.getElementById('time-'+idx).textContent=fmt(Math.floor(a.currentTime))+' / '+fmt(Math.floor(a.duration));
+function tick(idx){
+  const a=document.getElementById('a'+idx);if(!a||!a.duration)return;
+  document.getElementById('mpf'+idx).style.width=((a.currentTime/a.duration)*100)+'%';
+  document.getElementById('mpt'+idx).textContent=fmt(a.currentTime)+' / '+fmt(a.duration);
 }
-function metaAudio(idx){
-  const a=document.getElementById('audio-'+idx);
-  if(a)document.getElementById('time-'+idx).textContent='0:00 / '+fmt(Math.floor(a.duration));
-}
-function endAudio(idx){const b=document.getElementById('btn-'+idx);if(b)b.innerHTML='&#9654;'}
-function seekAudio(e,idx){
-  const a=document.getElementById('audio-'+idx);
-  if(!a||!a.duration)return;
-  const bar=e.currentTarget;
-  a.currentTime=(e.offsetX/bar.offsetWidth)*a.duration;
-}
-function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+function meta(idx){const a=document.getElementById('a'+idx);if(a)document.getElementById('mpt'+idx).textContent='0:00 / '+fmt(a.duration)}
+function ended(idx){const b=document.getElementById('mpb'+idx);if(b)b.innerHTML='&#9654;'}
+function seekAud(e,idx){const a=document.getElementById('a'+idx);if(!a||!a.duration)return;a.currentTime=(e.offsetX/e.currentTarget.offsetWidth)*a.duration}
+function fmt(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 
 function showToast(msg,type){
-  const t=document.getElementById('toast');
-  t.textContent=msg;t.className='toast '+(type||'')+' show';
-  setTimeout(()=>t.classList.remove('show'),3500);
+  const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'')+' on';
+  setTimeout(()=>t.classList.remove('on'),3500);
 }
 </script>
 </body>
