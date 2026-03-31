@@ -464,85 +464,253 @@ function elapsed(t0){return((performance.now()-t0)/1000).toFixed(1)+'s'}
 // Convert
 const API='https://soundtoscore.onrender.com';
 
+
+// ═══════════════════════════════════════════════════════════
+// POLLING STATE
+// ═══════════════════════════════════════════════════════════
+let pollingInterval = null;
+let currentJobId    = null;
+let renderedChunks  = new Set(); // track which chunk indices already rendered
+
+// On page load: resume any in-progress job from localStorage
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('soundtoscore_job');
+  if (saved) {
+    try {
+      const {job_id, instrument, fileName} = JSON.parse(saved);
+      if (job_id) {
+        currentJobId = job_id;
+        selInstr = instrument || selInstr;
+        showToast('Resuming previous conversion...', 'ok');
+        document.getElementById('progCard').classList.add('on');
+        document.getElementById('res').classList.add('on');
+        const btn = document.getElementById('cvtBtn');
+        btn.disabled = true;
+        btn.textContent = 'Processing...';
+        if(fileName) {
+          document.getElementById('fname').textContent = fileName;
+          document.getElementById('fpill').classList.add('on');
+        }
+        startPolling(job_id, btn);
+      }
+    } catch(e) {
+      localStorage.removeItem('soundtoscore_job');
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// UPLOAD + START JOB
+// ═══════════════════════════════════════════════════════════
 async function doConvert(){
   if(!selFile){showToast('Please select a file first','err');return}
-
   const btn=document.getElementById('cvtBtn');
-  btn.disabled=true;
-  btn.textContent='Processing...';
-
+  btn.disabled=true; btn.textContent='Uploading...';
   document.getElementById('progCard').classList.add('on');
   document.getElementById('res').classList.remove('on');
   document.getElementById('chunks').innerHTML='';
-
+  renderedChunks.clear();
   for(let i=1;i<=4;i++){markStep(i,'');stepTime(i,'--')}
   setP(0);
 
+  const t0=performance.now();
+
   try{
-    // STEP 1 — send file
-    markStep(1,'active');setP(10);
+    markStep(1,'active'); setP(8);
 
     const fd=new FormData();
-    fd.append('file',selFile,selFile.name);
-    fd.append('instrument',selInstr);
-    fd.append('tempo',document.getElementById('tempoR').value);
-    fd.append('output_fmt',document.getElementById('fmtSel').value);
+    fd.append('file', selFile, selFile.name);
+    fd.append('instrument', selInstr);
+    fd.append('tempo', document.getElementById('tempoR').value);
+    fd.append('output_fmt', document.getElementById('fmtSel').value);
 
-    const res=await fetch(API+'/api/convert',{method:'POST',body:fd});
-    const { job_id } = await res.json();
+    // POST to /api/convert — returns {job_id} immediately (no blocking)
+    const res = await fetch(API+'/api/convert', {method:'POST', body:fd});
 
-    markStep(1,'done');setP(20);
+    if(!res.ok){
+      const e = await res.json().catch(()=>({detail:'Upload failed: '+res.status}));
+      throw new Error(e.detail||'Upload error '+res.status);
+    }
 
-    // STEP 2 — start polling
-    markStep(2,'active');
-    markStep(3,'active');
+    const {job_id} = await res.json();
+    if(!job_id) throw new Error('No job_id returned from server');
 
-    const interval=setInterval(async ()=>{
-      try{
-        const r=await fetch(API+'/api/status/'+job_id);
-        const data=await r.json();
+    currentJobId = job_id;
 
-        // 🔥 update progress
-        if(data.total>0){
-          const pct=(data.chunks.length/data.total)*100;
-          setP(20 + pct*0.7);
-        }
+    // Save to localStorage for page-refresh resume
+    localStorage.setItem('soundtoscore_job', JSON.stringify({
+      job_id,
+      instrument: selInstr,
+      fileName: selFile.name,
+    }));
 
-        // 🔥 render partial chunks LIVE
-        if(data.chunks){
-          renderChunksLive(data.chunks);
-          markStep(4,'active');
-        }
+    markStep(1,'done'); stepTime(1, elapsed(t0)); setP(15);
+    markStep(2,'active'); markStep(3,'active');
+    btn.textContent = 'Processing...';
 
-        if(data.status==="done"){
-          clearInterval(interval);
+    showToast('Upload done — processing started!', 'ok');
 
-          markStep(2,'done');
-          markStep(3,'done');
-          markStep(4,'done');
-
-          setP(100);
-          showToast("Conversion complete ✅","ok");
-          btn.textContent='Convert Again';
-          btn.disabled=false;
-        }
-
-        if(data.status==="error"){
-          clearInterval(interval);
-          throw new Error(data.error || "Processing failed");
-        }
-
-      }catch(e){
-        clearInterval(interval);
-        showToast("Error: "+e.message,'err');
-        btn.disabled=false;
-      }
-    },2000);
+    // Start polling for results
+    startPolling(job_id, btn, t0);
 
   }catch(err){
-    showToast('Error: '+err.message,'err');
-    btn.disabled=false;
+    showToast('Error: '+err.message, 'err');
+    document.getElementById('progCard').classList.remove('on');
+    btn.disabled=false; btn.innerHTML='&#9889; Convert Again';
+    localStorage.removeItem('soundtoscore_job');
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// POLLING LOOP — polls /api/status every 3 seconds
+// ═══════════════════════════════════════════════════════════
+function startPolling(job_id, btn, t0){
+  if(pollingInterval) clearInterval(pollingInterval);
+  t0 = t0 || performance.now();
+
+  pollingInterval = setInterval(async () => {
+    try{
+      const r = await fetch(API+'/api/status/'+job_id);
+
+      if(!r.ok){
+        if(r.status === 404){
+          // Job expired or not found
+          clearInterval(pollingInterval);
+          pollingInterval = null;
+          localStorage.removeItem('soundtoscore_job');
+          showToast('Job not found — please convert again.', 'err');
+          btn.disabled=false; btn.innerHTML='&#9889; Convert Again';
+          return;
+        }
+        throw new Error('Status error: '+r.status);
+      }
+
+      const data = await r.json();
+
+      // Update progress bar based on chunks done
+      if(data.total_chunks > 0){
+        const pct = 15 + ((data.done_chunks / data.total_chunks) * 80);
+        setP(Math.min(pct, 95));
+      } else {
+        // Still loading/converting — animate slowly
+        const cur = parseFloat(document.getElementById('pfill').style.width||'15');
+        if(cur < 40) setP(cur + 0.5);
+      }
+
+      // Render each newly completed chunk immediately
+      if(data.chunks && data.chunks.length > 0){
+        markStep(3,'active'); markStep(4,'active');
+        document.getElementById('res').classList.add('on');
+        data.chunks.forEach((chunk, idx) => {
+          if(!renderedChunks.has(idx)){
+            renderedChunks.add(idx);
+            renderOneChunk(chunk, idx, data.total_chunks);
+            showToast('Section '+(idx+1)+' ready ▶ Play now!', 'ok');
+          }
+        });
+      }
+
+      // Quality warning
+      if(data.quality_warning){
+        document.getElementById('wtxt').textContent = data.quality_warning;
+        document.getElementById('wbox').classList.add('on');
+      }
+
+      // ── JOB COMPLETE ──────────────────────────────────────
+      if(data.status === 'success'){
+        clearInterval(pollingInterval); pollingInterval = null;
+        localStorage.removeItem('soundtoscore_job');
+
+        markStep(2,'done'); stepTime(2, elapsed(t0));
+        markStep(3,'done'); stepTime(3, elapsed(t0));
+        markStep(4,'done'); stepTime(4, elapsed(t0));
+        setP(100);
+
+        // Update result header
+        const instr = INSTR_GROUPS.flatMap(g=>g.groups.flatMap(gg=>gg.items)).find(x=>x.id===selInstr)||{n:'Solo Cornet',e:'🎺'};
+        const fname = selFile ? selFile.name.replace(/\.[^.]+$/,'') : 'audio';
+        document.getElementById('rtitle').textContent = fname+' — '+instr.n;
+        document.getElementById('rmeta').textContent =
+          data.total_chunks+' section(s) — '+data.duration+'s total — '+data.elapsed+'s processing time';
+
+        document.getElementById('res').scrollIntoView({behavior:'smooth',block:'start'});
+        showToast('All '+data.total_chunks+' section(s) complete!', 'ok');
+        btn.disabled=false; btn.innerHTML='&#9889; Convert Again';
+      }
+
+      // ── JOB FAILED ────────────────────────────────────────
+      if(data.status === 'failed'){
+        clearInterval(pollingInterval); pollingInterval = null;
+        localStorage.removeItem('soundtoscore_job');
+
+        setP(0);
+        markStep(3, ''); markStep(4, '');
+        document.getElementById('progCard').classList.remove('on');
+        showToast('Error: '+(data.error||'Processing failed'), 'err');
+        btn.disabled=false; btn.innerHTML='&#9889; Convert Again';
+      }
+
+    }catch(pollErr){
+      // Network hiccup — keep polling, don't stop
+      log.info && log.info('Poll error (will retry):', pollErr.message);
+    }
+  }, 3000); // poll every 3 seconds
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER ONE CHUNK (called as each chunk completes)
+// ═══════════════════════════════════════════════════════════
+function renderOneChunk(chunk, idx, totalChunks){
+  const cont = document.getElementById('chunks');
+  const instr = INSTR_GROUPS.flatMap(g=>g.groups.flatMap(gg=>gg.items)).find(x=>x.id===selInstr)||{n:'Solo Cornet',e:'🎺'};
+  const aid='a'+idx, fid='mpf'+idx, tid='mpt'+idx, bid='mpb'+idx;
+
+  // Remove placeholder if any
+  const existing = document.getElementById('sc-'+idx);
+  if(existing) existing.remove();
+
+  const lines = (chunk.transcript_preview||'').split('\n').filter(Boolean).slice(0,10).map(l=>{
+    const p = l.trim().split(/\s+/);
+    if(p.length>=2 && /^[A-G]/.test(p[0])){
+      return '<div class="tnote"><span class="tp">'+p[0]+'</span><span class="tv">'+(p[1]||'')+'</span><span class="tt">'+(p[2]||'')+'</span></div>';
+    }
+    return '';
+  }).join('');
+
+  const card = document.createElement('div');
+  card.className='sc'; card.id='sc-'+idx;
+  card.innerHTML =
+    '<div class="schdr">'+
+      '<div class="scnum">'+(idx+1)+'</div>'+
+      '<div style="flex:1">'+
+        '<div class="scttl">Section '+(idx+1)+(totalChunks>1?' of '+totalChunks:'')+' &mdash; '+instr.e+' '+instr.n+'</div>'+
+        '<div class="sct">'+chunk.start+'s &mdash; '+chunk.end+'s</div>'+
+      '</div>'+
+      '<div style="background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.25);color:var(--green);padding:3px 10px;border-radius:100px;font-size:.65rem;font-family:JetBrains Mono,monospace">Ready</div>'+
+    '</div>'+
+    '<div class="scbody">'+
+      // Mini player
+      '<div class="mp">'+
+        '<button class="mpb" id="'+bid+'" onclick="playPause('+idx+')">&#9654;</button>'+
+        '<div class="mpbar" onclick="seekAud(event,'+idx+')"><div class="mpf" id="'+fid+'"></div></div>'+
+        '<div class="mpt" id="'+tid+'">0:00 / 0:00</div>'+
+        '<audio id="'+aid+'" src="'+API+chunk.audio+'" crossorigin="anonymous"'+
+          ' ontimeupdate="tick('+idx+')" onloadedmetadata="meta('+idx+')" onended="ended('+idx+')"></audio>'+
+      '</div>'+
+      // Download buttons
+      '<div class="dlrow">'+
+        '<a class="dlbtn midi" href="'+API+chunk.midi+'" download="section'+(idx+1)+'.mid" target="_blank">&#9834; Download MIDI</a>'+
+        '<a class="dlbtn wav"  href="'+API+chunk.audio+'" download="section'+(idx+1)+'.wav" target="_blank">&#128266; Download WAV</a>'+
+        '<a class="dlbtn txt"  href="'+API+chunk.transcript+'" download="section'+(idx+1)+'_notes.txt" target="_blank">&#128196; Transcript</a>'+
+      '</div>'+
+      // Transcript preview
+      '<div class="trbox">'+
+        '<div class="trhdr"><span>&#9834; Note Transcript Preview</span><span>pitch &middot; velocity &middot; time</span></div>'+
+        '<div class="trbody">'+(lines||'<span style="color:var(--muted)">Click Transcript to download full note list.</span>')+'</div>'+
+      '</div>'+
+    '</div>';
+
+  cont.appendChild(card);
 }
 
 
@@ -627,27 +795,7 @@ function showToast(msg,type){
   const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'')+' on';
   setTimeout(()=>t.classList.remove('on'),3500);
 }
-function renderChunksLive(chunks){
-  const cont=document.getElementById('chunks');
-  cont.innerHTML='';
 
-  chunks.forEach((chunk,idx)=>{
-    const div=document.createElement('div');
-    div.style.marginBottom="10px";
-
-    div.innerHTML=`
-      <div style="padding:10px;border:1px solid #333;border-radius:8px">
-        <b>Chunk ${chunk.chunk}</b><br>
-        <audio controls src="${API + chunk.audio}"></audio><br>
-        <a href="${API + chunk.midi}" target="_blank">Download MIDI</a><br>
-        <span>${chunk.transcript}</span>
-      </div>
-    `;
-
-    cont.appendChild(div);
-  });
-
-  document.getElementById('res').classList.add('on');
 }
 </script>
 </body>
