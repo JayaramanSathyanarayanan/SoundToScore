@@ -1,18 +1,9 @@
 """
 SoundToScore — FastAPI Backend v4.0
-====================================
 Architecture:
   POST /api/convert  → saves file, starts background job, returns {job_id} immediately
-  GET  /api/status/{job_id} → returns status + completed chunks (poll every 3s)
-  GET  /api/files/{job_id}/{path} → serves audio/midi/transcript files
-
-Features:
-  - Background processing (never blocks the HTTP request)
-  - Chunk-based processing (20s per chunk, one at a time — saves RAM)
-  - Checkpointing (job survives server restart via JSON on disk)
-  - Progressive results (frontend gets each chunk as it completes)
-  - localStorage resume (frontend resumes on page refresh)
-  - Graceful error handling
+  GET  /api/status/{job_id} → returns status + completed chunks (poll every 5s)
+  GET  /api/files/{job_id}/{section}/{filename} → serves files
 """
 
 import os, uuid, shutil, time, logging, asyncio, json, threading
@@ -34,21 +25,18 @@ app = FastAPI(title="SoundToScore", version="4.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Directories ────────────────────────────────────────────────
 UPLOAD_DIR = Path("uploads");  UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR = Path("outputs");  OUTPUT_DIR.mkdir(exist_ok=True)
 
-# ── Constants ──────────────────────────────────────────────────
-CHUNK_SEC = 20          # seconds per chunk
-MAX_BYTES = 100 * 1024 * 1024  # 100 MB upload limit
-JOB_TTL   = 7200        # seconds before auto-cleanup (2 hours)
-
-MAX_CONCURRENT_JOBS = 3
+CHUNK_SEC           = 20
+MAX_BYTES           = 100 * 1024 * 1024
+JOB_TTL             = 7200
+MAX_CONCURRENT_JOBS = 2   # ✅ reduced from 3 — prevents CPU overload on Render free tier
 
 VALID_INSTRUMENTS = {
     "trumpet","flute","soprano_cornet","solo_cornet","repiano_cornet",
@@ -60,7 +48,7 @@ VALID_INSTRUMENTS = {
 }
 
 # ══════════════════════════════════════════════════════════════
-# JOB STATE  (persisted to disk as job_dir/meta.json)
+# JOB STATE — persisted to disk as job_dir/meta.json
 # ══════════════════════════════════════════════════════════════
 
 def _meta_path(job_id: str) -> Path:
@@ -69,17 +57,18 @@ def _meta_path(job_id: str) -> Path:
 def _read_meta(job_id: str) -> dict:
     p = _meta_path(job_id)
     if p.exists():
-        return json.loads(p.read_text())
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            return {}
     return {}
 
 def _write_meta(job_id: str, meta: dict):
     path = _meta_path(job_id)
     tmp  = path.with_suffix(".tmp")
-
     with open(tmp, "w") as f:
         json.dump(meta, f, indent=2)
-
-    tmp.replace(path)
+    tmp.replace(path)  # atomic write — prevents corruption
 
 def _update_meta(job_id: str, **kwargs):
     meta = _read_meta(job_id)
@@ -93,21 +82,28 @@ def _update_meta(job_id: str, **kwargs):
 @app.on_event("startup")
 async def startup():
     log.info("SoundToScore v4.0 starting...")
-    # Resume any jobs that were processing when server restarted
-    for job_dir in OUTPUT_DIR.iterdir():
-        meta_file = job_dir / "meta.json"
-        if meta_file.exists():
-            meta = json.loads(meta_file.read_text())
-            if meta.get("status") == "processing":
-                log.warning(f"[{job_dir.name}] Found interrupted job — marking failed")
-                _update_meta(job_dir.name, status="failed",
-                             error="Server restarted during processing. Please re-upload.")
-    # Pre-load SoundFont
+
+    # ✅ Mark any interrupted jobs as failed (handles Render restarts)
+    if OUTPUT_DIR.exists():
+        for job_dir in OUTPUT_DIR.iterdir():
+            meta_file = job_dir / "meta.json"
+            if meta_file.exists():
+                try:
+                    meta = json.loads(meta_file.read_text())
+                    if meta.get("status") == "processing":
+                        log.warning(f"[{job_dir.name}] Interrupted job found — marking failed")
+                        _update_meta(job_dir.name,
+                                     status="failed",
+                                     error="Server restarted. Please re-upload your file.")
+                except Exception as e:
+                    log.error(f"Error reading meta for {job_dir.name}: {e}")
+
+    # Pre-load SoundFont at startup so first request is fast
     try:
         ensure_soundfont()
         log.info("SoundFont ready.")
     except Exception as e:
-        log.error(f"SoundFont error: {e}")
+        log.error(f"SoundFont startup error: {e}")
 
 # ══════════════════════════════════════════════════════════════
 # HEALTH
@@ -115,16 +111,16 @@ async def startup():
 
 @app.get("/")
 def root():
-    return {"status": "SoundToScore v4.0 running",
-            "soundfont": Path("soundfonts/GeneralUser_GS.sf2").exists()}
+    sf_ok = Path("soundfonts/GeneralUser_GS.sf2").exists()
+    return {"status": "SoundToScore v4.0 running", "soundfont": sf_ok}
 
 @app.get("/api/health")
 def health():
-    return {"ok": True,
-            "soundfont_ready": Path("soundfonts/GeneralUser_GS.sf2").exists()}
+    sf_ok = Path("soundfonts/GeneralUser_GS.sf2").exists()
+    return {"ok": True, "soundfont_ready": sf_ok}
 
 # ══════════════════════════════════════════════════════════════
-# UPLOAD → returns job_id immediately, starts background task
+# UPLOAD — returns job_id immediately, starts background task
 # ══════════════════════════════════════════════════════════════
 
 @app.post("/api/convert")
@@ -135,37 +131,38 @@ async def convert(
     tempo: int       = Form(120),
     output_fmt: str  = Form("wav"),
 ):
-    # Validate
+    # Validate instrument
     if instrument not in VALID_INSTRUMENTS:
         raise HTTPException(400, f"Unknown instrument: {instrument}")
+
+    # Validate file extension
     ext = Path(file.filename or "upload").suffix.lower()
     if ext not in {".mp3", ".wav", ".m4a", ".ogg", ".flac"}:
         raise HTTPException(400, f"Unsupported file type: {ext}")
 
-    # Read & size-check
+    # Read and size-check
     data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "File too large (max 100 MB)")
 
-    # ── LIMIT CONCURRENT USERS ─────────────────────
+    # ✅ Check concurrent job limit before creating new job
     active_jobs = 0
-    
-    for job_dir in OUTPUT_DIR.iterdir():
-        meta_file = job_dir / "meta.json"
-        if meta_file.exists():
-            try:
-                meta = json.loads(meta_file.read_text())
-                if meta.get("status") == "processing":
-                    active_jobs += 1
-            except:
-                pass
-    
+    if OUTPUT_DIR.exists():
+        for job_dir in OUTPUT_DIR.iterdir():
+            meta_file = job_dir / "meta.json"
+            if meta_file.exists():
+                try:
+                    m = json.loads(meta_file.read_text())
+                    if m.get("status") == "processing":
+                        active_jobs += 1
+                except Exception:
+                    pass
+
     if active_jobs >= MAX_CONCURRENT_JOBS:
-        raise HTTPException(503, "Server busy, please try again in a moment")
-    
-    # ✅ CREATE JOB ONLY AFTER CHECK
+        raise HTTPException(503, "Server busy — please try again in a moment.")
+
+    # Create job
     job_id  = uuid.uuid4().hex[:10]
-      
     job_dir = OUTPUT_DIR / job_id
     job_dir.mkdir(parents=True)
 
@@ -175,7 +172,7 @@ async def convert(
     quality_warning = ("Low-quality audio detected — accuracy may be reduced."
                        if len(data) < 300_000 else None)
 
-    # Write initial metadata to disk (checkpoint)
+    # ✅ Write initial meta immediately (checkpoint)
     _write_meta(job_id, {
         "job_id":          job_id,
         "status":          "processing",
@@ -192,21 +189,17 @@ async def convert(
         "created_at":      time.time(),
     })
 
-    log.info(f"[{job_id}] Job created — {len(data)//1024}KB inst={instrument}")
+    log.info(f"[{job_id}] Created — {len(data)//1024}KB inst={instrument}")
 
-    # Start background processing — DOES NOT BLOCK the response
-    background.add_task(
-        _run_in_thread,
-        job_id, str(src), instrument, tempo, output_fmt
-    )
+    # ✅ Start background processing — does NOT block the HTTP response
+    background.add_task(_run_in_thread, job_id, str(src), instrument, tempo, output_fmt)
 
-    # Return job_id immediately ✅
+    # ✅ Return job_id immediately
     return JSONResponse({"job_id": job_id, "status": "processing"})
 
 
 def _run_in_thread(job_id, src_path, instrument, tempo, output_fmt):
-    """Run heavy processing in a thread pool so it doesn't block the event loop."""
-    import threading
+    """Spawn a daemon thread for heavy processing — keeps event loop free."""
     t = threading.Thread(
         target=_process_job,
         args=(job_id, src_path, instrument, tempo, output_fmt),
@@ -216,7 +209,7 @@ def _run_in_thread(job_id, src_path, instrument, tempo, output_fmt):
 
 
 # ══════════════════════════════════════════════════════════════
-# BACKGROUND PROCESSING  (runs in thread, chunks with checkpoint)
+# BACKGROUND PROCESSING — chunk-by-chunk with checkpointing
 # ══════════════════════════════════════════════════════════════
 
 def _process_job(job_id: str, src_path: str, instrument: str, tempo: int, output_fmt: str):
@@ -224,15 +217,15 @@ def _process_job(job_id: str, src_path: str, instrument: str, tempo: int, output
 
     job_dir = OUTPUT_DIR / job_id
     t0 = time.time()
-    log.info(f"[{job_id}] Processing started in thread")
+    log.info(f"[{job_id}] Thread started")
 
     try:
-        # ── Step 1: convert to WAV ────────────────────────────
+        # Step 1: MP3/M4A → WAV
         wav = job_dir / "full.wav"
         mp3_to_wav(src_path, str(wav))
         Path(src_path).unlink(missing_ok=True)
 
-        # ── Step 2: load audio ────────────────────────────────
+        # Step 2: Load audio
         y, sr = librosa.load(str(wav), sr=16000, mono=True)
         dur   = len(y) / sr
         csamp = int(CHUNK_SEC * sr)
@@ -241,15 +234,14 @@ def _process_job(job_id: str, src_path: str, instrument: str, tempo: int, output
         log.info(f"[{job_id}] {dur:.1f}s => {n_ch} chunks")
         _update_meta(job_id, total_chunks=n_ch, duration=round(dur, 1))
 
-        # ── Step 3: process each chunk ────────────────────────
-        # Check existing chunks for resume after restart
+        # Step 3: Check which chunks already done (resume after restart)
         meta = _read_meta(job_id)
         done_so_far = {c["chunk"] for c in meta.get("chunks", [])}
 
+        # Step 4: Process each chunk
         for ci in range(n_ch):
             chunk_num = ci + 1
 
-            # Skip already-processed chunks (checkpoint resume)
             if chunk_num in done_so_far:
                 log.info(f"[{job_id}] Chunk {chunk_num} already done — skipping")
                 continue
@@ -278,51 +270,43 @@ def _process_job(job_id: str, src_path: str, instrument: str, tempo: int, output
             tp  = cd / "notes.txt"
             txt = generate_transcript(str(cm), str(tp), tempo=tempo)
 
-            # Checkpoint: save chunk result to meta.json immediately ✅
-            base  = f"/api/files/{job_id}/s{chunk_num}"
+            # ✅ Save chunk to meta.json immediately (progressive results)
+            base = f"/api/files/{job_id}/s{chunk_num}"
             chunk_info = {
-                "chunk":      chunk_num,
-                "start":      cst,
-                "end":        cen,
-                "audio":      f"{base}/{rn}",
-                "midi":       f"{base}/out.mid",
-                "transcript": f"{base}/notes.txt",
-                "transcript_preview": (txt or "")[:400],
+                "chunk":               chunk_num,
+                "start":               cst,
+                "end":                 cen,
+                "audio":               f"{base}/{rn}",
+                "midi":                f"{base}/out.mid",
+                "transcript":          f"{base}/notes.txt",
+                "transcript_preview":  (txt or "")[:400],
             }
 
             meta = _read_meta(job_id)
-
             chunks = meta.get("chunks", [])
             chunks.append(chunk_info)
-            
             meta.update({
-                "chunks": chunks,
+                "chunks":      chunks,
                 "done_chunks": len(chunks),
-                "elapsed": round(time.time() - t0, 2)
+                "elapsed":     round(time.time() - t0, 2),
             })
-            
             _write_meta(job_id, meta)
 
-            log.info(f"[{job_id}] Chunk {chunk_num}/{n_ch} done and saved")
+            log.info(f"[{job_id}] Chunk {chunk_num}/{n_ch} done")
 
-        del y  # free full audio array
+        del y  # free full audio from RAM
 
-        # ── Step 4: mark complete ─────────────────────────────
-        _update_meta(job_id,
-                     status="success",
-                     elapsed=round(time.time() - t0, 2))
-        log.info(f"[{job_id}] All {n_ch} chunks done in {time.time()-t0:.1f}s")
+        # Step 5: Mark complete
+        _update_meta(job_id, status="success", elapsed=round(time.time() - t0, 2))
+        log.info(f"[{job_id}] All done in {time.time()-t0:.1f}s")
 
-        # Schedule cleanup
-        def _delayed_cleanup():
+        # Schedule cleanup after 2 hours
+        def _cleanup():
             time.sleep(JOB_TTL)
+            shutil.rmtree(str(job_dir), ignore_errors=True)
+            log.info(f"[{job_id}] Cleaned up")
+        threading.Thread(target=_cleanup, daemon=True).start()
 
-            meta = _read_meta(job_id)
-            if meta.get("status") == "success":
-                shutil.rmtree(str(job_dir), ignore_errors=True)
-                log.info(f"[{job_id}] Cleaned up")
-
-        threading.Thread(target=_delayed_cleanup, daemon=True).start()
     except Exception as exc:
         import traceback
         log.error(f"[{job_id}] FAILED: {exc}\n{traceback.format_exc()}")
@@ -331,7 +315,7 @@ def _process_job(job_id: str, src_path: str, instrument: str, tempo: int, output
 
 
 # ══════════════════════════════════════════════════════════════
-# STATUS ENDPOINT  (frontend polls this every 3 seconds)
+# STATUS — frontend polls this every 5 seconds
 # ══════════════════════════════════════════════════════════════
 
 @app.get("/api/status/{job_id}")
@@ -341,19 +325,18 @@ def status(job_id: str):
 
     meta = _read_meta(job_id)
     if not meta:
-        raise HTTPException(404, "Job not found (may have expired)")
+        raise HTTPException(404, "Job not found — may have expired")
 
-    # Return everything the frontend needs
     return JSONResponse({
         "job_id":          meta.get("job_id"),
-        "status":          meta.get("status"),          # processing | success | failed
+        "status":          meta.get("status"),      # processing | success | failed
         "total_chunks":    meta.get("total_chunks", 0),
-        "done_chunks":     meta.get("done_chunks", 0),
-        "duration":        meta.get("duration", 0),
-        "elapsed":         meta.get("elapsed", 0),
+        "done_chunks":     meta.get("done_chunks",  0),
+        "duration":        meta.get("duration",     0),
+        "elapsed":         meta.get("elapsed",      0),
         "quality_warning": meta.get("quality_warning"),
         "error":           meta.get("error"),
-        "chunks":          meta.get("chunks", []),       # list of completed chunks
+        "chunks":          meta.get("chunks",       []),
     })
 
 
