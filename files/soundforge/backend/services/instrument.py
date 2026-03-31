@@ -5,8 +5,9 @@ SoundFont: downloaded from Google Drive at startup.
 Place your GeneralUser_GS.sf2 on Google Drive, share as "Anyone with link can view",
 then paste the file ID below.
 """
-import subprocess, logging, urllib.request
+import subprocess, logging, shutil
 from pathlib import Path
+import requests
 
 log = logging.getLogger("soundtoscore")
 
@@ -14,17 +15,7 @@ SF_DIR  = Path("soundfonts")
 SF_FILE = SF_DIR / "GeneralUser_GS.sf2"
 SF_DIR.mkdir(exist_ok=True)
 
-# ── YOUR GOOGLE DRIVE FILE ID ─────────────────────────────────
-# Get this from your Drive share link:
-# https://drive.google.com/file/d/XXXXX/view  → XXXXX is the ID
-GDRIVE_FILE_ID = "1nVv5lw1vriViTil7ywpzOITUjiz-wlGh"
-
-# Fallback public mirrors if Drive fails
-SF_MIRRORS = [
-    f"https://drive.google.com/uc?export=download&id={GDRIVE_FILE_ID}&confirm=t",
-    f"https://docs.google.com/uc?export=download&id={GDRIVE_FILE_ID}",
-    "https://github.com/fkarg/GeneralUserGS/releases/download/v1.471/GeneralUser_GS_v1.471.sf2",
-]
+SF_URL = "https://github.com/JayaramanSathyanarayanan/SoundToScore/releases/download/v1.0/GeneralUser_GS.sf2"
 
 MIN_SIZE = 5 * 1024 * 1024
 
@@ -35,48 +26,45 @@ def _valid() -> bool:
 
 def ensure_soundfont() -> str:
     if _valid():
+        log.info("✅ SoundFont already exists")
         return str(SF_FILE)
+        
+    tmp_file = SF_FILE.with_suffix(".tmp")
+    if tmp_file.exists():
+        tmp_file.unlink(missing_ok=True)
+    log.warning("SoundFont not found — downloading from GitHub Release...")
 
-    log.warning("SoundFont not found — downloading...")
-    for url in SF_MIRRORS:
-        try:
-            log.info(f"Trying: {url[:60]}...")
-            req = urllib.request.Request(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 SoundToScore/3.0",
-                    "Accept": "*/*",
-                }
-            )
-            with urllib.request.urlopen(req, timeout=180) as r:
-                # Handle Google Drive large-file confirmation
-                content_type = r.headers.get("Content-Type", "")
-                raw = r.read()
+    try:
+        tmp_file = SF_FILE.with_suffix(".tmp")
 
-            # If Google returned an HTML confirmation page, skip
-            if b"<!DOCTYPE" in raw[:100] or b"<html" in raw[:100]:
-                log.warning("Got HTML instead of SF2 (Drive confirmation page) — trying next")
-                continue
+        with requests.get(SF_URL, stream=True, timeout=180) as r:
+            r.raise_for_status()
 
-            if len(raw) > MIN_SIZE:
-                SF_FILE.write_bytes(raw)
-                log.info(f"SoundFont saved: {len(raw)//1024//1024} MB")
-                return str(SF_FILE)
-            log.warning(f"File too small ({len(raw)} bytes)")
-        except Exception as e:
-            log.warning(f"Mirror failed: {e}")
+            with open(tmp_file, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
 
-    raise RuntimeError(
-        "Could not download SoundFont. "
-        "Please upload GeneralUser_GS.sf2 via Render Shell: "
-        "mkdir -p soundfonts && curl -L YOUR_URL -o soundfonts/GeneralUser_GS.sf2"
-    )
+        tmp_file.replace(SF_FILE)  # ✅ atomic replace
 
+        if _valid():
+            log.info(f"✅ SoundFont downloaded: {SF_FILE.stat().st_size//1024//1024} MB")
+            return str(SF_FILE)
+
+        raise RuntimeError("Downloaded file invalid")
+
+    except Exception as e:
+        if SF_FILE.exists():
+            SF_FILE.unlink(missing_ok=True)
+        raise RuntimeError(f"SoundFont download failed: {e}")
 
 def midi_to_audio(midi_path: str, output_path: str,
                   instrument: str = "solo_cornet", fmt: str = "wav") -> None:
     if not Path(midi_path).exists():
         raise FileNotFoundError(f"MIDI not found: {midi_path}")
+    # 🔥 CHECK fluidsynth HERE (correct place)
+    if not shutil.which("fluidsynth"):
+        raise RuntimeError("fluidsynth not installed in environment")
 
     sf2 = ensure_soundfont()
     tmp = output_path if fmt == "wav" else output_path + "_tmp.wav"
