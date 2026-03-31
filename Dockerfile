@@ -6,16 +6,16 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Set base directory
+# Base dir
 WORKDIR /app
 
-# Copy project
+# Copy everything
 COPY . .
 
-# Move into backend folder
-WORKDIR /app/soundforge/backend
+# 👉 Correct backend path
+WORKDIR /app/files/soundforge/backend
 
-# Install Python dependencies
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Expose port
