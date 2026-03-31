@@ -48,6 +48,8 @@ CHUNK_SEC = 20          # seconds per chunk
 MAX_BYTES = 100 * 1024 * 1024  # 100 MB upload limit
 JOB_TTL   = 7200        # seconds before auto-cleanup (2 hours)
 
+MAX_CONCURRENT_JOBS = 3
+
 VALID_INSTRUMENTS = {
     "trumpet","flute","soprano_cornet","solo_cornet","repiano_cornet",
     "cornet_2nd","cornet_3rd","flugelhorn","solo_tenor_horn","tenor_horn_1st",
@@ -71,7 +73,13 @@ def _read_meta(job_id: str) -> dict:
     return {}
 
 def _write_meta(job_id: str, meta: dict):
-    _meta_path(job_id).write_text(json.dumps(meta, indent=2))
+    path = _meta_path(job_id)
+    tmp  = path.with_suffix(".tmp")
+
+    with open(tmp, "w") as f:
+        json.dump(meta, f, indent=2)
+
+    tmp.replace(path)
 
 def _update_meta(job_id: str, **kwargs):
     meta = _read_meta(job_id)
@@ -139,8 +147,25 @@ async def convert(
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "File too large (max 100 MB)")
 
-    # Create job
+    # ── LIMIT CONCURRENT USERS ─────────────────────
+    active_jobs = 0
+    
+    for job_dir in OUTPUT_DIR.iterdir():
+        meta_file = job_dir / "meta.json"
+        if meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text())
+                if meta.get("status") == "processing":
+                    active_jobs += 1
+            except:
+                pass
+    
+    if active_jobs >= MAX_CONCURRENT_JOBS:
+        raise HTTPException(503, "Server busy, please try again in a moment")
+    
+    # ✅ CREATE JOB ONLY AFTER CHECK
     job_id  = uuid.uuid4().hex[:10]
+      
     job_dir = OUTPUT_DIR / job_id
     job_dir.mkdir(parents=True)
 
@@ -266,9 +291,16 @@ def _process_job(job_id: str, src_path: str, instrument: str, tempo: int, output
             }
 
             meta = _read_meta(job_id)
-            meta["chunks"].append(chunk_info)
-            meta["done_chunks"] = len(meta["chunks"])
-            meta["elapsed"]     = round(time.time() - t0, 2)
+
+            chunks = meta.get("chunks", [])
+            chunks.append(chunk_info)
+            
+            meta.update({
+                "chunks": chunks,
+                "done_chunks": len(chunks),
+                "elapsed": round(time.time() - t0, 2)
+            })
+            
             _write_meta(job_id, meta)
 
             log.info(f"[{job_id}] Chunk {chunk_num}/{n_ch} done and saved")
@@ -282,13 +314,15 @@ def _process_job(job_id: str, src_path: str, instrument: str, tempo: int, output
         log.info(f"[{job_id}] All {n_ch} chunks done in {time.time()-t0:.1f}s")
 
         # Schedule cleanup
-        import threading
         def _delayed_cleanup():
             time.sleep(JOB_TTL)
-            shutil.rmtree(str(job_dir), ignore_errors=True)
-            log.info(f"[{job_id}] Cleaned up")
-        threading.Thread(target=_delayed_cleanup, daemon=True).start()
 
+            meta = _read_meta(job_id)
+            if meta.get("status") == "success":
+                shutil.rmtree(str(job_dir), ignore_errors=True)
+                log.info(f"[{job_id}] Cleaned up")
+
+        threading.Thread(target=_delayed_cleanup, daemon=True).start()
     except Exception as exc:
         import traceback
         log.error(f"[{job_id}] FAILED: {exc}\n{traceback.format_exc()}")
