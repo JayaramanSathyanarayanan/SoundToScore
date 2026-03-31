@@ -462,7 +462,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 function elapsed(t0){return((performance.now()-t0)/1000).toFixed(1)+'s'}
 
 // Convert
-const API = "https://soundtoscore.onrender.com";
+const API='https://soundtoscore.onrender.com';
 
 
 // ═══════════════════════════════════════════════════════════
@@ -525,10 +525,7 @@ async function doConvert(){
     fd.append('output_fmt', document.getElementById('fmtSel').value);
 
     // POST to /api/convert — returns {job_id} immediately (no blocking)
-    const res = await fetch(API + '/api/convert', {
-      method: 'POST',
-      body: fd
-    });
+    const res = await fetch(API+'/api/convert', {method:'POST', body:fd});
 
     if(!res.ok){
       const e = await res.json().catch(()=>({detail:'Upload failed: '+res.status}));
@@ -655,9 +652,9 @@ function startPolling(job_id, btn, t0){
 
     }catch(pollErr){
       // Network hiccup — keep polling, don't stop
-      console.log('Poll error:', pollErr.message);
+      log.info && log.info('Poll error (will retry):', pollErr.message);
     }
-  }, 3000); // poll every 3 seconds
+  }, 5000); // poll every 5 seconds
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -798,6 +795,7 @@ function showToast(msg,type){
   const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'')+' on';
   setTimeout(()=>t.classList.remove('on'),3500);
 }
+
 </script>
 </body>
 </html>
