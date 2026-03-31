@@ -525,7 +525,10 @@ async function doConvert(){
     fd.append('output_fmt', document.getElementById('fmtSel').value);
 
     // POST to /api/convert — returns {job_id} immediately (no blocking)
-    const res = await fetch(API+'/api/convert', {method:'POST', body:fd});
+    const res = await fetch(API + '/api/convert', {
+      method: 'POST',
+      body: fd
+    });
 
     if(!res.ok){
       const e = await res.json().catch(()=>({detail:'Upload failed: '+res.status}));
