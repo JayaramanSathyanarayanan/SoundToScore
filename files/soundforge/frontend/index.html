@@ -652,7 +652,7 @@ function startPolling(job_id, btn, t0){
 
     }catch(pollErr){
       // Network hiccup — keep polling, don't stop
-      log.info && log.info('Poll error (will retry):', pollErr.message);
+      console.log('Poll error:', pollErr.message);
     }
   }, 3000); // poll every 3 seconds
 }
@@ -794,8 +794,6 @@ function fmt(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padS
 function showToast(msg,type){
   const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'')+' on';
   setTimeout(()=>t.classList.remove('on'),3500);
-}
-
 }
 </script>
 </body>
